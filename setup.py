@@ -14,7 +14,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/xazms/adf-json-processor",
     packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    package_dir={"": "src"},  # Point to the new src directory
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -32,6 +32,7 @@ setup(
     entry_points={
         "console_scripts": [
             # Define any CLI commands here
+            # e.g., "my-command=my_module:main_function",
         ],
     },
 )
