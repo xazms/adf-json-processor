@@ -189,7 +189,7 @@ def process_json_files(file_handler, include_parts=None, include_types=None, inc
         include_parts (list, optional): Parts of the structure to include ('pipelines', 'nodes', 'links').
         include_types (list, optional): A list of types to include for both activities and dependencies.
         include_empty (bool, optional): Include empty pipelines.
-        source_filename (str, optional): If provided, overrides the default source filename.
+        source_filename (str, optional)af: If provided, overrides the default source filename.
 
     Returns:
         None
