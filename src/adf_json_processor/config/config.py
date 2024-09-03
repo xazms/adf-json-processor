@@ -29,7 +29,7 @@ class Config:
         self.output_path = self.generate_output_path()
 
         # Ensure directories exist
-        # self.ensure_directories_exist()
+        self.ensure_directories_exist()
 
     def update_source_filename(self, source_filename):
         """Update the source filename if a new one is provided."""
@@ -48,8 +48,15 @@ class Config:
         """Ensure that the required directories exist."""
         log_dir = os.path.dirname(self.log_path)
         output_dir = os.path.dirname(self.output_path)
-        dbutils.fs.mkdirs(log_dir)
-        dbutils.fs.mkdirs(output_dir)
+    
+        if 'dbutils' in globals():
+            try:
+                dbutils.fs.mkdirs(log_dir)
+                dbutils.fs.mkdirs(output_dir)
+            except Exception as e:
+                print(f"An error occurred while creating directories: {e}")
+        else:
+            raise RuntimeError("dbutils is not defined. Please pass a valid dbutils instance.")
 
     def print_params(self):
         """Print configuration parameters in a well-organized format."""
