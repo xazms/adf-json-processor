@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 import requests
 from requests.auth import HTTPBasicAuth
-from pyspark.dbutils import DBUtils
 
 class AuthStrategy(ABC):
     """Abstract base class for different authentication strategies."""
