@@ -149,9 +149,16 @@ def process_multiple_json_files(file_handler, include_types=None, include_empty=
         include_parts (list, optional): Parts of the structure to include ('pipelines', 'nodes', 'links').
 
     Returns:
-        dict: Combined structure containing all pipelines, nodes, and links.
+        dict: Combined structure containing the specified parts ('pipelines', 'nodes', 'links').
     """
-    combined_structure = {"pipelines": [], "nodes": [], "links": []}
+    combined_structure = {}
+    if include_parts is None or "pipelines" in include_parts:
+        combined_structure["pipelines"] = []
+    if include_parts is None or "nodes" in include_parts:
+        combined_structure["nodes"] = []
+    if include_parts is None or "links" in include_parts:
+        combined_structure["links"] = []
+        
     error_log = []
 
     filtered_files = file_handler.get_filtered_file_list()
@@ -162,11 +169,11 @@ def process_multiple_json_files(file_handler, include_types=None, include_empty=
             adf_data = json.loads(file_content)
             hierarchical_structure = build_hierarchical_structure(adf_data, include_types, include_empty)
             if hierarchical_structure:
-                if include_parts is None or "pipelines" in include_parts:
+                if "pipelines" in combined_structure:
                     combined_structure["pipelines"].append(hierarchical_structure["pipeline"])
-                if include_parts is None or "nodes" in include_parts:
+                if "nodes" in combined_structure:
                     combined_structure["nodes"].extend(hierarchical_structure["nodes"])
-                if include_parts is None or "links" in include_parts:
+                if "links" in combined_structure:
                     combined_structure["links"].extend(hierarchical_structure["links"])
         except json.JSONDecodeError as e:
             error_message = f"JSONDecodeError in file {file['path']}: {e}"
@@ -179,6 +186,9 @@ def process_multiple_json_files(file_handler, include_types=None, include_empty=
             error_log.append({"file": file['path'], "error": "UnexpectedError", "details": str(e)})
 
     file_handler.log_errors(error_log)
+
+    # Clean up empty lists if they were not included in include_parts
+    combined_structure = {key: value for key, value in combined_structure.items() if value}
 
     return combined_structure
 
