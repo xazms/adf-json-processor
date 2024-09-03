@@ -16,21 +16,33 @@ This project is designed to process Azure Data Factory (ADF) JSON files, standar
 ## Project Structure
 
 ```plaintext
-my-github-project/
+adf-json-processor/
 │
-├── src/                        # Source code folder
-│   ├── config/                 # Subfolder for configuration-related code
-│   ├── auth/                   # Subfolder for authentication-related code
-│   ├── file_handling/          # Subfolder for file handling code
-│   ├── processing/             # Subfolder for processing code
-│   └── utils/                  # Utility functions or common helpers
+├── src/                                # Source code folder
+│   └── adf_json_processor/              # Main package
+│       ├── auth/                        # Subfolder for authentication-related code
+│       │   ├── __init__.py
+│       │   └── auth_strategy.py
+│       ├── config/                      # Subfolder for configuration-related code
+│       │   ├── __init__.py
+│       │   └── config.py
+│       ├── file_handling/               # Subfolder for file handling code
+│       │   ├── __init__.py
+│       │   └── file_handler.py
+│       ├── processing/                  # Subfolder for processing code
+│       │   ├── __init__.py
+│       │   └── process_files.py
+│       └── utils/                       # Utility functions or common helpers
+│           ├── __init__.py
+│           ├── helper.py
+│           ├── package_installer.py     # Script for installing the package itself
+│           └── notebook_init.py         # Script for notebook environment initialization
 │
-├── notebooks/                  # Jupyter or Databricks notebooks
-│   └── main_notebook.ipynb     # Your main notebook with the code and documentation
+├── tests/                              # Test folder for unit tests
+│   ├── __init__.py
+│   └── test_file_handler.py            # Unit tests for FileHandler
 │
-├── tests/                      # Test folder for unit tests
-│   └── test_file_handler.py    # Example: Unit tests for FileHandler
-│
-├── LICENSE                     # License file
-├── README.md                   # Project description and usage guide
-└── setup.py                    # Setup script for installing the package
+├── .gitignore                          # Git ignore file
+├── LICENSE                             # License file
+├── README.md                           # Project description and usage guide
+└── setup.py                            # Setup script for installing the package

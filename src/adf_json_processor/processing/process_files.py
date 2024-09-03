@@ -1,5 +1,6 @@
 import json
-from file_handling.file_handler import FileHandler
+import adf_json_processor
+from adf_json_processor.file_handling.file_handler import FileHandler
 
 def build_hierarchical_structure(adf_json, include_types=None, include_empty=False):
     """
