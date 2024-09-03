@@ -1,6 +1,8 @@
 import json
 import requests
 import fnmatch
+from config.config import Config
+from auth.auth_strategy import AuthStrategy, PATAuthStrategy, OAuth2AuthStrategy
 
 class FileHandler:
     def __init__(self, config):
