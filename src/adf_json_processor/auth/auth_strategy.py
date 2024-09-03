@@ -45,10 +45,13 @@ class OAuth2AuthStrategy(AuthStrategy):
 
 # Authenticate
 
-def authenticate(auth_method="PAT"):
+def authenticate(auth_method="PAT", dbutils=None):
     """
     Authenticate based on the selected method and return the authentication strategy.
     """
+    if dbutils is None:
+        raise ValueError("dbutils is required to retrieve secrets or widgets in this environment.")
+    
     if auth_method == "PAT":
         pat = dbutils.widgets.get("PersonalAccessToken")
         if not pat:

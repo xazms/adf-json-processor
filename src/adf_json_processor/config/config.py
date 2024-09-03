@@ -73,7 +73,7 @@ class Config:
         print(f"Log Path: {self.log_path}")
         print(f"Output File Path: {self.output_path}")
 
-def initialize_config(auth_strategy, debug=False):
+def initialize_config(auth_strategy, dbutils, debug=False):
     """
     Initialize the configuration with the provided authentication strategy and optional debug flag.
     """
