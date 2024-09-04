@@ -1,7 +1,6 @@
 import os
 import datetime
 import ast
-import fnmatch
 from adf_json_processor.auth.auth_strategy import PATAuthStrategy
 
 class Config:
@@ -30,7 +29,7 @@ class Config:
         self.output_path = self.generate_output_path()
 
         # Ensure directories exist
-        self.ensure_directories_exist()
+        # self.ensure_directories_exist()
 
     def update_source_filename(self, source_filename):
         """Update the source filename if a new one is provided."""
