@@ -104,7 +104,7 @@ class FileHandler:
         """
         if error_log:
             # Ensure the directory for logs exists and log the errors
-            self.config.ensure_directories_exist()
+            # self.config.ensure_directories_exist()
             with open(self.error_log_path, "a") as log_file:
                 json.dump(error_log, log_file, indent=4)
             print(f"Errors logged to {self.error_log_path}")
