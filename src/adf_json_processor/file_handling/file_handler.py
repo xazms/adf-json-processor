@@ -1,24 +1,38 @@
 import json
-import requests
-import fnmatch
-import adf_json_processor
+import fnmatch  # Necessary for file name pattern matching
 from adf_json_processor.config.config import Config
-from adf_json_processor.auth.auth_strategy import AuthStrategy, PATAuthStrategy, OAuth2AuthStrategy
+from adf_json_processor.auth.auth_strategy import AuthStrategy
 
 class FileHandler:
     def __init__(self, config):
+        """
+        Initialize the FileHandler with the provided configuration.
+        Args:
+            config (Config): Configuration object containing ADF details, paths, and authentication strategy.
+        """
         self.config = config
         self.error_log_path = config.log_path
         self.output_file_path = config.output_path
 
     def update_source_filename(self, source_filename):
-        """Update the source filename in the configuration."""
+        """
+        Update the source filename in the configuration.
+        Args:
+            source_filename (str): The new source file name or pattern.
+        """
         self.config.update_source_filename(source_filename)
 
     def get_adf_files(self):
-        """Retrieve ADF JSON files from the specified Azure DevOps repository."""
+        """
+        Retrieve ADF JSON files from the specified Azure DevOps repository.
+        Returns:
+            list: A list of JSON files found in the repository.
+        Raises:
+            Exception: If the request to retrieve files fails.
+        """
         url = f'https://dev.azure.com/{self.config.adf_details["Organization"]}/{self.config.adf_details["Project"]}/_apis/git/repositories/{self.config.adf_details["Repository"]}/items?scopePath={self.config.adf_details["Folder Path"]}&recursionLevel=Full&versionDescriptor.version={self.config.adf_details["Branch"]}&api-version=6.0'
 
+        # Authenticate and retrieve files
         response = self.config.auth_strategy.authenticate(url)
         
         if response.status_code == 200:
@@ -29,19 +43,32 @@ class FileHandler:
             raise Exception(f"Failed to list items in the repository: {response.status_code}")
 
     def get_filtered_file_list(self):
-        """Return the filtered list of files based on the configuration."""
+        """
+        Filter the list of ADF JSON files based on the provided source filename pattern.
+        Returns:
+            list: A filtered list of JSON files.
+        """
         json_files = self.get_adf_files()
         if self.config.source_filename == "*":
             return json_files
         else:
-            # Use fnmatch for wildcard pattern matching
+            # Apply wildcard pattern matching
             filtered_files = [file for file in json_files if fnmatch.fnmatch(file['path'], f"*{self.config.source_filename}")]
             return filtered_files
 
     def get_adf_file_content(self, file_path):
-        """Retrieve the content of a specific ADF JSON file from Azure DevOps."""
+        """
+        Retrieve the content of a specific ADF JSON file from Azure DevOps.
+        Args:
+            file_path (str): The path of the file to retrieve.
+        Returns:
+            str: The raw content of the JSON file.
+        Raises:
+            Exception: If the request to retrieve the file fails.
+        """
         file_url = f"https://dev.azure.com/{self.config.adf_details['Organization']}/{self.config.adf_details['Project']}/_apis/git/repositories/{self.config.adf_details['Repository']}/items?path={file_path}&versionDescriptor.version={self.config.adf_details['Branch']}&api-version=6.0&$format=octetStream"
 
+        # Authenticate and retrieve file content
         file_response = self.config.auth_strategy.authenticate(file_url)
         
         if file_response.status_code == 200:
@@ -50,7 +77,11 @@ class FileHandler:
             raise Exception(f"Failed to retrieve file: {file_path} - {file_response.status_code}")
 
     def log_errors(self, error_log):
-        """Log errors to a file if any occurred."""
+        """
+        Log any errors that occurred during the process to a file.
+        Args:
+            error_log (dict): A dictionary containing the errors to be logged.
+        """
         if error_log:
             self.config.create_directory_if_not_exists(self.error_log_path)
             with open(self.error_log_path, "w") as log_file:
