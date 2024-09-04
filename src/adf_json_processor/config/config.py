@@ -1,22 +1,40 @@
 import os
 import datetime
 import ast
-import fnmatch
-from adf_json_processor.auth.auth_strategy import PATAuthStrategy
+from adf_json_processor.auth.auth_strategy import PATAuthStrategy, OAuth2AuthStrategy
 
 class Config:
     def __init__(self, dbutils, auth_strategy, debug=False):
+        """
+        Initialize the Config object with necessary parameters from Databricks widgets and authentication.
+        Args:
+            dbutils (object): Databricks utility object to access widgets.
+            auth_strategy (AuthStrategy): Authentication strategy object (e.g., PATAuthStrategy).
+            debug (bool): Enable debug mode for detailed logging.
+        """
         self.debug = debug
+
+        # Parse ADF configuration details (organization, project, repository, branch, folder path)
         adf_config_str = dbutils.widgets.get("ADFConfig")
         adf_config = ast.literal_eval(adf_config_str)
         self.organization, self.project, self.repository, self.branch, self.folder_path = adf_config
 
+        # Set storage accounts for source and destination
+        self.source_storage_account = dbutils.widgets.get("SourceStorageAccount")
         self.destination_storage_account = dbutils.widgets.get("DestinationStorageAccount")
-        self.datasetidentifier = dbutils.widgets.get("Datasetidentifier")
 
-        self.auth_strategy = auth_strategy
+        # Set dataset identifier and source filename
+        self.datasetidentifier = dbutils.widgets.get("Datasetidentifier")
         self.source_filename = dbutils.widgets.get("SourceFileName")
 
+        # Set catalog table names for nodes and links
+        self.catalog_table_name_nodes = dbutils.widgets.get("CatalogTableNameNodes")
+        self.catalog_table_name_links = dbutils.widgets.get("CatalogTableNameLinks")
+
+        # Set the authentication strategy (e.g., PAT)
+        self.auth_strategy = auth_strategy
+
+        # ADF details used for debugging and logging
         self.adf_details = {
             "Organization": self.organization,
             "Project": self.project,
@@ -25,11 +43,11 @@ class Config:
             "Folder Path": self.folder_path
         }
 
-        # Generate log and output paths
+        # Generate paths for logs and output files
         self.log_path = self.generate_log_path()
         self.output_path = self.generate_output_path()
 
-        # Ensure directories exist
+        # Ensure directories for logs and outputs exist
         self.ensure_directories_exist()
 
     def update_source_filename(self, source_filename):
@@ -37,21 +55,22 @@ class Config:
         self.source_filename = source_filename
 
     def generate_log_path(self):
-        """Generate log path based on the current date and time."""
+        """Generate the path for the log file, including the current timestamp."""
         date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"/dbfs/mnt/{self.destination_storage_account}/{self.datasetidentifier}/log/error_log_{date_str}.json"
 
     def generate_output_path(self):
-        """Generate output file path."""
+        """Generate the output file path for processed data."""
         return f"/dbfs/mnt/{self.destination_storage_account}/{self.datasetidentifier}/combined_hierarchical_pipeline_structure_filtered.json"
 
     def ensure_directories_exist(self):
-        """Ensure that the required directories exist."""
+        """Ensure that the required directories for log and output files exist."""
         log_dir = os.path.dirname(self.log_path)
         output_dir = os.path.dirname(self.output_path)
-    
+
         if 'dbutils' in globals():
             try:
+                # Create directories if they don't exist
                 dbutils.fs.mkdirs(log_dir)
                 dbutils.fs.mkdirs(output_dir)
             except Exception as e:
@@ -60,28 +79,39 @@ class Config:
             raise RuntimeError("dbutils is not defined. Please pass a valid dbutils instance.")
 
     def print_params(self):
-        """Print configuration parameters in a well-organized format."""
+        """Print configuration parameters in a well-organized format if debug mode is enabled."""
         if not self.debug:
             return  # Exit if debug is not enabled
 
+        # Print ADF configuration details
         print("\n=== ADF Configuration ===")
         for key, value in self.adf_details.items():
             print(f"{key}: {value}")
 
+        # Print authentication details
         print("\n=== Authentication ===")
         print(f"Authentication Method: {self.auth_strategy.__class__.__name__}")
         if isinstance(self.auth_strategy, PATAuthStrategy):
             print(f"Personal Access Token: {'*' * len(self.auth_strategy.pat)}")
 
+        # Print storage and dataset configuration
         print("\n=== Storage Configuration ===")
+        print(f"Source Storage Account: {self.source_storage_account}")
         print(f"Destination Storage Account: {self.destination_storage_account}")
         print(f"Dataset Identifier: {self.datasetidentifier}")
         print(f"Source Filename: {self.source_filename}")
 
+        # Print catalog table names
+        print("\n=== Unity Catalog Configuration ===")
+        print(f"Catalog Table Name - Nodes: {self.catalog_table_name_nodes}")
+        print(f"Catalog Table Name - Links: {self.catalog_table_name_links}")
+
+        # Print log and output paths
         print("\n=== Paths ===")
         print(f"Log Path: {self.log_path}")
         print(f"Output File Path: {self.output_path}")
 
+# Function to initialize configuration
 def initialize_config(auth_strategy, dbutils, debug=False):
     """
     Initialize the configuration with the provided authentication strategy and optional debug flag.
