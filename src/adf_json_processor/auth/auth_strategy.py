@@ -88,18 +88,14 @@ def authenticate(auth_method="PAT", dbutils=None):
         pat = dbutils.widgets.get("PersonalAccessToken")
         if not pat:
             raise ValueError("Personal Access Token (PAT) is required but not provided.")
-        auth_strategy = PATAuthStrategy(pat)
-        # Uncomment if you need to log or print: print("Using PAT Authentication Strategy.")
+        return PATAuthStrategy(pat)
 
     elif auth_method == "OAuth2":
         # Retrieve the OAuth2 token from the Databricks widget
         token = dbutils.widgets.get("OAuth2Token")
         if not token:
             raise ValueError("OAuth2 Token is required but not provided.")
-        auth_strategy = OAuth2AuthStrategy(token)
-        # Uncomment if you need to log or print: print("Using OAuth2 Authentication Strategy.")
+        return OAuth2AuthStrategy(token)
 
     else:
         raise ValueError(f"Unknown authentication method: {auth_method}. Supported methods are 'PAT' and 'OAuth2'.")
-
-    return auth_strategy
