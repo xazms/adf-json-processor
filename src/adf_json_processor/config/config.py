@@ -29,7 +29,7 @@ class Config:
         self.output_path = self.generate_output_path()
 
         # Ensure directories exist
-        # self.ensure_directories_exist()
+        self.ensure_directories_exist()
 
     def update_source_filename(self, source_filename):
         """Update the source filename if a new one is provided."""
@@ -45,18 +45,27 @@ class Config:
         return f"/dbfs/mnt/{self.destination_storage_account}/{self.datasetidentifier}/combined_hierarchical_pipeline_structure_filtered.json"
 
     def ensure_directories_exist(self):
-        """Ensure that the required directories exist."""
+        """Ensure that the required directories exist in both local and Databricks environments."""
         log_dir = os.path.dirname(self.log_path)
         output_dir = os.path.dirname(self.output_path)
-    
+        
+        # Check if we're in a Databricks environment
         if 'dbutils' in globals():
             try:
+                # Create directories in DBFS using dbutils.fs.mkdirs
                 dbutils.fs.mkdirs(log_dir)
                 dbutils.fs.mkdirs(output_dir)
             except Exception as e:
-                print(f"An error occurred while creating directories: {e}")
+                print(f"An error occurred while creating directories in DBFS: {e}")
         else:
-            raise RuntimeError("dbutils is not defined. Please pass a valid dbutils instance.")
+            # Create directories locally using os.makedirs
+            try:
+                if not os.path.exists(log_dir):
+                    os.makedirs(log_dir)
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+            except Exception as e:
+                print(f"An error occurred while creating directories locally: {e}")
 
     def print_params(self):
         """Print configuration parameters in a well-organized format."""
