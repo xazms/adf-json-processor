@@ -6,33 +6,36 @@ from adf_json_processor.auth.auth_strategy import PATAuthStrategy
 class Config:
     def __init__(self, dbutils, auth_strategy, debug=False):
         """
-        Initialize the configuration with provided Databricks widgets and authentication strategy.
+        Initialize the configuration with the provided parameters.
+        
         Args:
-            dbutils: Databricks utility object for accessing widgets and file system.
-            auth_strategy: The authentication strategy (e.g., PAT or OAuth2).
-            debug (bool): If True, configuration parameters will be printed for debugging.
+            dbutils (object): The Databricks utility object for accessing widgets and file system.
+            auth_strategy (object): Authentication strategy (PAT or OAuth).
+            debug (bool): Flag for enabling debug mode.
         """
         self.debug = debug
 
-        # Extract ADF configuration details from widget
+        # Parse the ADF configuration (organization, project, repository, branch, folder path)
         adf_config_str = dbutils.widgets.get("ADFConfig")
         adf_config = ast.literal_eval(adf_config_str)
         self.organization, self.project, self.repository, self.branch, self.folder_path = adf_config
 
-        # Get source and destination storage accounts, dataset, and source file name from widgets
-        self.source_storage_account = dbutils.widgets.get("SourceStorageAccount")  # Newly added field
+        # Set storage accounts for source and destination
+        self.source_storage_account = dbutils.widgets.get("SourceStorageAccount")
         self.destination_storage_account = dbutils.widgets.get("DestinationStorageAccount")
+
+        # Set dataset identifier and source filename
         self.datasetidentifier = dbutils.widgets.get("Datasetidentifier")
         self.source_filename = dbutils.widgets.get("SourceFileName")
 
-        # Get catalog table names for nodes and links
+        # Set catalog table names for nodes and links
         self.catalog_table_name_nodes = dbutils.widgets.get("CatalogTableNameNodes")
         self.catalog_table_name_links = dbutils.widgets.get("CatalogTableNameLinks")
 
-        # Authentication strategy
+        # Authentication strategy (e.g., PAT)
         self.auth_strategy = auth_strategy
 
-        # Store ADF details for debugging
+        # ADF details used for debugging and logging
         self.adf_details = {
             "Organization": self.organization,
             "Project": self.project,
@@ -41,11 +44,11 @@ class Config:
             "Folder Path": self.folder_path
         }
 
-        # Generate log and output paths based on storage account and dataset identifier
+        # Generate log and output paths based on storage account and dataset
         self.log_path = self.generate_log_path()
         self.output_path = self.generate_output_path()
 
-        # Ensure directories exist
+        # Ensure required directories exist
         self.ensure_directories_exist()
 
     def update_source_filename(self, source_filename):
@@ -58,18 +61,14 @@ class Config:
         return f"/dbfs/mnt/{self.destination_storage_account}/{self.datasetidentifier}/log/error_log_{date_str}.json"
 
     def generate_output_path(self):
-        """Generate output file path for the processed hierarchical pipeline structure."""
+        """Generate output file path."""
         return f"/dbfs/mnt/{self.destination_storage_account}/{self.datasetidentifier}/combined_hierarchical_pipeline_structure_filtered.json"
 
     def ensure_directories_exist(self):
-        """
-        Ensure that the required directories exist in both Databricks and local environments.
-        Uses dbutils for Databricks file system and os.makedirs for local environments.
-        """
+        """Ensure that the required directories exist."""
         log_dir = os.path.dirname(self.log_path)
         output_dir = os.path.dirname(self.output_path)
         
-        # Check if we're in a Databricks environment
         if 'dbutils' in globals():
             try:
                 # Create directories in DBFS using dbutils.fs.mkdirs
@@ -88,14 +87,11 @@ class Config:
                 print(f"An error occurred while creating directories locally: {e}")
 
     def print_params(self):
-        """
-        Print configuration parameters in a well-organized format for debugging purposes.
-        Only prints when debug mode is enabled.
-        """
+        """Print configuration parameters in a well-organized format."""
         if not self.debug:
-            return
+            return  # Exit if debug is not enabled
 
-        # Print ADF configuration
+        # Print ADF configuration details
         print("\n=== ADF Configuration ===")
         for key, value in self.adf_details.items():
             print(f"{key}: {value}")
@@ -126,14 +122,15 @@ class Config:
 def initialize_config(auth_strategy, dbutils, debug=False):
     """
     Initialize the configuration with the provided authentication strategy and optional debug flag.
+    
     Args:
-        auth_strategy: The authentication strategy (e.g., PAT or OAuth2).
-        dbutils: Databricks utility object for widgets and file system access.
-        debug (bool): Whether to print configuration details for debugging.
+        auth_strategy (object): The authentication strategy (PAT or OAuth).
+        dbutils (object): The Databricks utility object.
+        debug (bool): Enable debug printing if True.
+        
     Returns:
-        Config object with initialized parameters.
+        Config: A configuration object with all the initialized settings.
     """
     config = Config(dbutils=dbutils, auth_strategy=auth_strategy, debug=debug)
     config.print_params()  # Print configuration parameters for verification
-
     return config
