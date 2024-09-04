@@ -52,7 +52,7 @@ class FileHandler:
     def log_errors(self, error_log):
         """Log errors to a file if any occurred."""
         if error_log:
-            self.config.create_directory_if_not_exists(self.error_log_path)
+            #self.config.create_directory_if_not_exists(self.error_log_path)
             with open(self.error_log_path, "w") as log_file:
                 json.dump(error_log, log_file, indent=4)
             print(f"Errors logged to {self.error_log_path}")
