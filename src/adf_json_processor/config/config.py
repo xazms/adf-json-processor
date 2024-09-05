@@ -50,7 +50,7 @@ class Config:
         # Generate log and output paths based on storage account and dataset
         self.log_path = self.generate_log_path()
         self.output_path = self.generate_output_path()
-
+        
         # Ensure required directories exist
         # self.ensure_directories_exist()
 

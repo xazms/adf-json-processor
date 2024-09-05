@@ -7,63 +7,30 @@ class AuthStrategy(ABC):
     
     @abstractmethod
     def authenticate(self, url):
-        """
-        Abstract method to be implemented by child classes for specific authentication.
-        Args:
-            url (str): The URL to authenticate against.
-        """
         pass
 
 class PATAuthStrategy(AuthStrategy):
-    """Authentication strategy using Personal Access Token (PAT)."""
-    
     def __init__(self, pat):
-        """
-        Initialize the PAT authentication strategy with the provided token.
-        Args:
-            pat (str): Personal Access Token for authentication.
-        """
         self.pat = pat
 
     def authenticate(self, url):
-        """
-        Authenticate using the provided PAT and return the response.
-        Args:
-            url (str): The URL to authenticate against.
-        Returns:
-            Response object if successful, None otherwise.
-        """
         try:
             response = requests.get(url, auth=HTTPBasicAuth('', self.pat))
-            response.raise_for_status()  # Raise an exception for HTTP errors
+            response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
             print(f"Authentication failed using PAT. Error: {e}")
             return None
 
 class OAuth2AuthStrategy(AuthStrategy):
-    """Authentication strategy using OAuth2 token."""
-    
     def __init__(self, token):
-        """
-        Initialize the OAuth2 authentication strategy with the provided token.
-        Args:
-            token (str): OAuth2 token for authentication.
-        """
         self.token = token
 
     def authenticate(self, url):
-        """
-        Authenticate using the provided OAuth2 token and return the response.
-        Args:
-            url (str): The URL to authenticate against.
-        Returns:
-            Response object if successful, None otherwise.
-        """
         headers = {'Authorization': f'Bearer {self.token}'}
         try:
             response = requests.get(url, headers=headers)
-            response.raise_for_status()  # Raise an exception for HTTP errors
+            response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
             print(f"Authentication failed using OAuth2. Error: {e}")
@@ -72,10 +39,6 @@ class OAuth2AuthStrategy(AuthStrategy):
 def authenticate(auth_method="PAT"):
     """
     Authenticate based on the selected method and return the appropriate authentication strategy.
-    Args:
-        auth_method (str): The method to use for authentication ('PAT' or 'OAuth2'). Default is 'PAT'.
-    Returns:
-        An instance of the appropriate authentication strategy.
     """
     # Check if dbutils is available in the global scope
     if 'dbutils' not in globals() or dbutils is None:
@@ -89,7 +52,6 @@ def authenticate(auth_method="PAT"):
         return PATAuthStrategy(pat)
 
     elif auth_method == "OAuth2":
-        # Retrieve the OAuth2 token from the Databricks widget
         token = dbutils.widgets.get("OAuth2Token")
         if not token:
             raise ValueError("OAuth2 Token is required but not provided.")
