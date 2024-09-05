@@ -13,7 +13,8 @@ def initialize_notebook_environment():
     dbutils = None
     try:
         # In Databricks, dbutils is already defined, so no import is needed
-        dbutils = globals().get('dbutils') or DBUtils(spark)
+        if 'dbutils' in globals():
+            print("dbutils is available.")
     except NameError:
         # Catch the case where we're not in Databricks and dbutils is not available
         print("Warning: dbutils not found. This might not be a Databricks environment.")

@@ -34,7 +34,6 @@ class PATAuthStrategy(AuthStrategy):
             Response object if successful, None otherwise.
         """
         try:
-            # Perform the request with PAT-based authentication
             response = requests.get(url, auth=HTTPBasicAuth('', self.pat))
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response
@@ -63,7 +62,6 @@ class OAuth2AuthStrategy(AuthStrategy):
         """
         headers = {'Authorization': f'Bearer {self.token}'}
         try:
-            # Perform the request with OAuth2 token-based authentication
             response = requests.get(url, headers=headers)
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response
@@ -71,16 +69,16 @@ class OAuth2AuthStrategy(AuthStrategy):
             print(f"Authentication failed using OAuth2. Error: {e}")
             return None
 
-def authenticate(auth_method="PAT", dbutils=None):
+def authenticate(auth_method="PAT"):
     """
     Authenticate based on the selected method and return the appropriate authentication strategy.
     Args:
         auth_method (str): The method to use for authentication ('PAT' or 'OAuth2'). Default is 'PAT'.
-        dbutils (object): Databricks utility object to access widgets or secrets.
     Returns:
         An instance of the appropriate authentication strategy.
     """
-    if dbutils is None:
+    # Check if dbutils is available in the global scope
+    if 'dbutils' not in globals() or dbutils is None:
         raise ValueError("dbutils is required to retrieve secrets or widgets in this environment.")
     
     if auth_method == "PAT":
