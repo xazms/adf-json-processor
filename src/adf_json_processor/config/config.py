@@ -4,16 +4,19 @@ import ast
 from adf_json_processor.auth.auth_strategy import PATAuthStrategy
 
 class Config:
-    def __init__(self, dbutils, auth_strategy, debug=False):
+    def __init__(self, auth_strategy, debug=False):
         """
         Initialize the configuration with the provided parameters.
         
         Args:
-            dbutils (object): The Databricks utility object for accessing widgets and file system.
             auth_strategy (object): Authentication strategy (PAT or OAuth).
             debug (bool): Flag for enabling debug mode.
         """
         self.debug = debug
+
+        # Ensure dbutils is available globally
+        if 'dbutils' not in globals() or dbutils is None:
+            raise ValueError("dbutils is required to retrieve secrets or widgets in this environment.")
 
         # Parse the ADF configuration (organization, project, repository, branch, folder path)
         adf_config_str = dbutils.widgets.get("ADFConfig")
@@ -119,18 +122,17 @@ class Config:
         print(f"Log Path: {self.log_path}")
         print(f"Output File Path: {self.output_path}")
 
-def initialize_config(auth_strategy, dbutils, debug=False):
+def initialize_config(auth_strategy, debug=False):
     """
     Initialize the configuration with the provided authentication strategy and optional debug flag.
     
     Args:
         auth_strategy (object): The authentication strategy (PAT or OAuth).
-        dbutils (object): The Databricks utility object.
         debug (bool): Enable debug printing if True.
         
     Returns:
         Config: A configuration object with all the initialized settings.
     """
-    config = Config(dbutils=dbutils, auth_strategy=auth_strategy, debug=debug)
+    config = Config(auth_strategy=auth_strategy, debug=debug)
     config.print_params()  # Print configuration parameters for verification
     return config
