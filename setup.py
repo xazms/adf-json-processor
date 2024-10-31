@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="adf-json-processor",
-    version="0.1.0",
+    version="0.1.1",
     author="Azmir Salihovic",
     author_email="azmir.salihovic@twoday.com",
     description="A project for processing ADF JSON files and storing them as Delta files in Azure Data Lake Storage",
