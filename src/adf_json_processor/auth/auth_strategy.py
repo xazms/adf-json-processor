@@ -28,7 +28,7 @@ class PATAuthStrategy(AuthStrategy):
             print(f"Authentication failed using PAT. Error: {e}")
             return None
 
-def authenticate(auth_method="PAT", dbutils):
+def authenticate(dbutils, auth_method="PAT"):
     """
     Factory function to select the authentication strategy.
     
