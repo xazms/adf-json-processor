@@ -24,6 +24,9 @@ class ConfigManager:
         self.dbutils = dbutils
         self.config = {}
         self.logger = logger or Logger()
+        # Expose log and output paths as attributes
+        self.log_path = self._generate_log_path()
+        self.output_path = self._generate_output_path()
 
     def initialize_widgets(self):
         """
@@ -99,7 +102,7 @@ class ConfigManager:
             str: Path to the log file.
         """
         date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"/dbfs/mnt/{self.config['sourceStorageAccount']}/{self.config['datasetIdentifier']}/log/error_log_{date_str}.json"
+        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'xazms')}/log/error_log_{date_str}.json"
 
     def _generate_output_path(self):
         """
@@ -108,7 +111,7 @@ class ConfigManager:
         Returns:
             str: Path to the output file.
         """
-        return f"/dbfs/mnt/{self.config['sourceStorageAccount']}/{self.config['datasetIdentifier']}/combined_hierarchical_pipeline_structure_filtered.json"
+        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'xazms')}/combined_hierarchical_pipeline_structure_filtered.json"
 
     def ensure_directories_exist(self):
         """
@@ -116,7 +119,7 @@ class ConfigManager:
         Logs whether each directory already exists or was created.
         """
         self.logger.log_start("ensure_directories_exist")
-        log_dir, output_dir = os.path.dirname(self._generate_log_path()), os.path.dirname(self._generate_output_path())
+        log_dir, output_dir = os.path.dirname(self.log_path), os.path.dirname(self.output_path)
         dir_statuses = self._check_and_create_directories(log_dir, output_dir)
         self.logger.log_block("Directory Statuses", dir_statuses)
         self.logger.log_end("ensure_directories_exist")
@@ -154,11 +157,10 @@ class ConfigManager:
         """
         Logs additional configuration paths for optional outputs.
         """
-        optional_config = {
-            "log_path": self._generate_log_path(),
-            "output_path": self._generate_output_path()
-        }
-        self.logger.log_block("Optional Configuration", [f"{k}: {v}" for k, v in optional_config.items()])
+        self.logger.log_block("Optional Configuration", [
+            f"log_path: {self.log_path}",
+            f"output_path: {self.output_path}"
+        ])
 
     def get_config(self):
         """
@@ -168,3 +170,15 @@ class ConfigManager:
             dict: Configuration dictionary.
         """
         return self.config
+
+    def unpack(self, scope):
+        """
+        Unpacks configuration variables into the given scope.
+
+        Args:
+            scope (dict): The scope to unpack configuration variables into, like `globals()`.
+        """
+        for key, value in self.config.items():
+            scope[key] = value
+        scope['log_path'] = self.log_path
+        scope['output_path'] = self.output_path

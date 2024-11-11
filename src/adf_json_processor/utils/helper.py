@@ -3,6 +3,7 @@ import uuid
 import hashlib
 import os
 from pyspark.sql import DataFrame
+from adf_json_processor.utils.logger import Logger
 
 class Helper:
     """
@@ -10,13 +11,15 @@ class Helper:
     JSON handling, and file operations.
     """
 
-    def __init__(self, debug=False):
+    def __init__(self, logger=None, debug=False):
         """
-        Initializes the Helper with optional debug mode.
-        
+        Initializes the Helper with optional debug mode and a logger.
+
         Args:
+            logger (Logger): Logger instance for structured logging.
             debug (bool): Enable debug-level output if True.
         """
+        self.logger = logger
         self.debug = debug
 
     def create_temp_views(self, dataframes: dict):
@@ -26,14 +29,23 @@ class Helper:
         Args:
             dataframes (dict): Dictionary of DataFrames to create views from.
         """
+        created_views = []
+
         for df_name, df in dataframes.items():
             if isinstance(df, DataFrame):  # Ensure the value is a DataFrame
                 view_name = f"view_{df_name}"
                 df.createOrReplaceTempView(view_name)
-                if self.debug:
-                    print(f"{view_name} created successfully")
+                created_views.append(f"{view_name} created successfully")
             else:
-                print(f"Warning: {df_name} is not a DataFrame. Skipping view creation.")
+                created_views.append(f"Warning: {df_name} is not a DataFrame. Skipping view creation.")
+
+        # Log the block with the created views if debug is enabled
+        if self.debug and self.logger:
+            self.logger.log_block("Temporary Views Creation Summary", created_views)
+        elif self.debug:
+            print("Temporary Views Creation Summary:")
+            for view in created_views:
+                print(view)
 
     def _generate_hash_key(self, *args):
         """

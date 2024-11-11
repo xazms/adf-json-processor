@@ -52,7 +52,17 @@ class FileProcessor:
             # Log pipeline summary
             self.logger.log_info(f"Pipeline: {pipeline_name}, Activities Count: {activities_count}, Dependencies: {dependencies_count}")
 
-    def process_json_files(self, include_types=None, include_empty=False, include_json=False, debug=False, save_to_file=False, output_path=None) -> Tuple[Dict[str, DataFrame], DataFrame, DataFrame, DataFrame]:
+    def process_json_files(
+        self, 
+        include_types=None, 
+        include_empty=False, 
+        include_json=False, 
+        debug=False, 
+        save_to_file=False, 
+        output_path=None,
+        show_all=False,
+        top_n=None
+    ) -> Tuple[Dict[str, DataFrame], DataFrame, DataFrame, DataFrame]:
         """
         Process JSON files, extract hierarchical structure, and convert it to DataFrames.
 
@@ -63,6 +73,8 @@ class FileProcessor:
             debug (bool): Enable debug mode if True.
             save_to_file (bool): Save combined structure to file if True.
             output_path (str): Output path for saving JSON structure.
+            show_all (bool): Show all files in log output if True. If False, limits the log output.
+            top_n (int, optional): Number of files to show in log output if `show_all` is False.
 
         Returns:
             Tuple containing:
@@ -72,7 +84,13 @@ class FileProcessor:
             - dependencies_df (DataFrame): DataFrame for dependencies.
         """
         combined_structure = {"pipelines": [], "activities": [], "dependencies": []}
-        filtered_files = self.file_handler.get_filtered_file_list(show_all=False, top_n=5)
+
+        # Set default top_n to 10 if top_n is not provided and show_all is False
+        top_n = top_n if top_n is not None else 10
+        filtered_files = self.file_handler.get_filtered_file_list(show_all=show_all, top_n=top_n)
+
+        # Add a block to group file processing logs
+        self.logger.log_block("File Processing", [])
 
         for file in filtered_files:
             try:
@@ -85,10 +103,18 @@ class FileProcessor:
                     combined_structure["activities"].extend(hierarchical_structure.get("activities", []))
                     combined_structure["dependencies"].extend(hierarchical_structure.get("dependencies", []))
 
+                    # Log pipeline summary for the current file
+                    pipeline_name = hierarchical_structure['pipelines'][0].get('PipelineName', 'Unknown') if hierarchical_structure['pipelines'] else 'Unknown'
+                    activities_count = len(hierarchical_structure.get("activities", []))
+                    dependencies_count = len(hierarchical_structure.get("dependencies", []))
+
+                    # Log a single line of info for this file's pipeline
+                    self.logger.log_info(f"File: {file['path']}, Pipeline: {pipeline_name}, Activities Count: {activities_count}, Dependencies: {dependencies_count}")
+
             except json.JSONDecodeError as e:
-                print(f"JSONDecodeError in file {file['path']}: {e}")
+                self.logger.log_error(f"JSONDecodeError in file {file['path']}: {e}")
             except Exception as e:
-                print(f"Unexpected error in file {file['path']}: {e}")
+                self.logger.log_error(f"Unexpected error in file {file['path']}: {e}")
 
         # Print JSON structure if requested
         if include_json:
@@ -98,9 +124,6 @@ class FileProcessor:
         if save_to_file:
             output_path = output_path or "combined_structure.json"
             self.helper.save_json_to_file(combined_structure, output_path)
-
-        # Log pipeline summary
-        self.log_pipeline_summary(combined_structure)
 
         # Convert the combined structure to DataFrames
         dataframes, pipelines_df, activities_df, dependencies_df = self.converter.convert_to_dataframe(self.spark, combined_structure)
