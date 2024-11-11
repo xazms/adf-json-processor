@@ -4,10 +4,6 @@ from pyspark.sql import SparkSession, DataFrame
 from utils.helper import print_json_structure, save_json_to_file  # Ensure helper functions are imported
 from processing.conversion import build_hierarchical_structure_with_counts, convert_to_dataframe
 
-# To be deleted
-helper = Helper()
-conversion = ADFDataConverter()
-
 class FileProcessor:
     """
     Processes JSON files by retrieving, filtering, and structuring data from Azure Data Factory (ADF) pipelines.
