@@ -1,7 +1,7 @@
 import json
 import os
 import datetime
-from utils.logger import Logger
+from adf_json_processor.utils.logger import Logger
 
 class ConfigManager:
     """

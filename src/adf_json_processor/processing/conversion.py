@@ -3,7 +3,7 @@ from typing import Tuple, Dict
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StringType, TimestampType
-from utils.helper import generate_hash_key, extract_last_part
+from adf_json_processor.utils.helper import _generate_hash_key, _extract_last_part
 
 class ADFDataConverter:
     """

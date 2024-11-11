@@ -1,6 +1,6 @@
 import json
 import fnmatch
-from utils.logger import Logger
+from adf_json_processor.utils.logger import Logger
 
 class FileHandler:
     """

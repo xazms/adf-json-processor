@@ -1,8 +1,8 @@
 import json
 from typing import Tuple, Dict
 from pyspark.sql import SparkSession, DataFrame
-from utils.helper import print_json_structure, save_json_to_file  # Ensure helper functions are imported
-from processing.conversion import build_hierarchical_structure_with_counts, convert_to_dataframe
+from adf_json_processor.utils.helper import print_json_structure, save_json_to_file  # Ensure helper functions are imported
+from adf_json_processor.processing.conversion import build_hierarchical_structure_with_counts, convert_to_dataframe
 
 class FileProcessor:
     """
