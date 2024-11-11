@@ -1,5 +1,5 @@
 import json
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from typing import Tuple, Dict
 from adf_json_processor.utils.helper import Helper
 from adf_json_processor.processing.conversion import ADFDataConverter
