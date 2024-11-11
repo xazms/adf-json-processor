@@ -99,3 +99,18 @@ class Config:
                     os.makedirs(output_dir)
             except Exception as e:
                 print(f"An error occurred while creating directories locally: {e}")
+
+def initialize_config(auth_strategy, debug=False):
+    """
+    Initialize configuration with authentication and debug flag.
+    
+    Args:
+        auth_strategy (object): Authentication strategy (PAT or OAuth).
+        debug (bool): Flag for enabling debug mode.
+    
+    Returns:
+        Config: Config object with initialized settings.
+    """
+    config = Config(auth_strategy=auth_strategy, debug=debug)
+    config.print_params()  # Print configuration parameters if in debug mode
+    return config
