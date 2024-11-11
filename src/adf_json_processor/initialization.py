@@ -1,7 +1,6 @@
 from adf_json_processor.utils.logger import Logger
 from adf_json_processor.config.config_manager import ConfigManager
-from adf_json_processor.auth.auth_manager import authenticate
-from adf_json_processor.auth.auth_manager import AuthStrategy  # For type hinting
+from adf_json_processor.auth.auth_manager import authenticate, AuthStrategy
 
 class Initializer:
     """

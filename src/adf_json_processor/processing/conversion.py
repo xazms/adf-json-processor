@@ -3,7 +3,7 @@ from typing import Tuple, Dict
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StringType, TimestampType
-from adf_json_processor.utils.helper import _generate_hash_key, _extract_last_part
+from adf_json_processor.utils.helper import Helper  # Import the Helper class
 
 class ADFDataConverter:
     """
@@ -13,12 +13,13 @@ class ADFDataConverter:
 
     def __init__(self, debug=False):
         """
-        Initializes the ADFDataConverter with an optional debug mode.
+        Initializes the ADFDataConverter with an optional debug mode and a Helper instance.
         
         Args:
             debug (bool): If True, enable debug-level logging and outputs.
         """
         self.debug = debug
+        self.helper = Helper(debug=debug)  # Instantiate Helper for internal use
 
     def build_hierarchical_structure_with_counts(self, adf_json: dict, include_types=None, include_empty=False) -> Tuple[dict, dict]:
         """
@@ -43,7 +44,7 @@ class ADFDataConverter:
         if not pipeline_name:
             raise ValueError("Pipeline JSON is missing the 'name' field.")
 
-        pipeline_id = self._generate_id(pipeline_name, "Pipeline")
+        pipeline_id = self.helper._generate_hash_key(pipeline_name, "Pipeline")  # Use Helper for hash key generation
         pipeline_data = {"PipelineId": pipeline_id, "PipelineName": pipeline_name, "PipelineType": "Pipeline", "PipelineLevel": 1}
         counts["pipelines"] += 1
 
@@ -63,7 +64,7 @@ class ADFDataConverter:
             counts["activities"].setdefault(activity_type, 0)
             counts["activities"][activity_type] += 1
 
-            activity_id = self._generate_id(activity_name, activity_type, pipeline_id)
+            activity_id = self.helper._generate_hash_key(activity_name, activity_type, pipeline_id)  # Use Helper for hash key generation
             activity_node = {
                 "ActivityId": activity_id,
                 "ParentId": pipeline_id,
@@ -96,16 +97,16 @@ class ADFDataConverter:
         if activity_type == "ExecutePipeline":
             referenced_pipeline = activity["typeProperties"].get("pipeline", {}).get("referenceName")
             if referenced_pipeline:
-                referenced_pipeline_id = self._generate_id(referenced_pipeline, activity_type, pipeline_id)
+                referenced_pipeline_id = self.helper._generate_hash_key(referenced_pipeline, activity_type, pipeline_id)  # Use Helper
                 activity_node["ActivityTargetId"] = referenced_pipeline_id
                 activity_node["ActivityTargetName"] = referenced_pipeline
                 activity_node["ActivityTargetType"] = "Pipeline"
 
         elif activity_type == "DatabricksNotebook":
             notebook_path = activity.get("typeProperties", {}).get("notebookPath", "")
-            notebook_name = extract_last_part(notebook_path)
+            notebook_name = self.helper._extract_last_part(notebook_path)  # Use Helper for extracting last part of path
 
-            notebook_target_id = self._generate_id(notebook_name, activity_type, pipeline_id)
+            notebook_target_id = self.helper._generate_hash_key(notebook_name, activity_type, pipeline_id)  # Use Helper
             activity_node["ActivityTargetId"] = notebook_target_id
             activity_node["ActivityTargetName"] = notebook_name
             activity_node["ActivityTargetType"] = activity_type
@@ -113,7 +114,7 @@ class ADFDataConverter:
         elif activity_type == "ExecuteDataFlow":
             dataflow_name = activity["typeProperties"].get("dataflow", {}).get("referenceName")
             if dataflow_name:
-                dataflow_target_id = self._generate_id(dataflow_name, activity_type, pipeline_id)
+                dataflow_target_id = self.helper._generate_hash_key(dataflow_name, activity_type, pipeline_id)  # Use Helper
                 activity_node["ActivityTargetId"] = dataflow_target_id
                 activity_node["ActivityTargetName"] = dataflow_name
                 activity_node["ActivityTargetType"] = "DataFlow"
@@ -144,19 +145,6 @@ class ADFDataConverter:
                         "DependencyTargetName": node_name_to_target_name.get(activity_name),
                     }
                     dependencies.append(dependency)
-
-    def _generate_id(self, *args):
-        """
-        Generate a unique hash key using SHA-256 based on provided arguments.
-
-        Args:
-            *args: Variable length argument list to include in the hash.
-
-        Returns:
-            str: A hexadecimal hash string.
-        """
-        combined_string = '|'.join(str(arg) for arg in args if arg)
-        return hashlib.sha256(combined_string.encode()).hexdigest()
 
     def define_schemas(self) -> Tuple[StructType, StructType, StructType]:
         """
