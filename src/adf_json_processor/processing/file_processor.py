@@ -28,29 +28,18 @@ class FileProcessor:
         self.helper = Helper(debug=debug)
         self.converter = ADFDataConverter(debug=debug)
 
-    def log_pipeline_summary(self, combined_structure):
+    def log_pipeline_summary(self, pipeline_name, activities_count, dependencies_count, file_path):
         """
-        Logs a summary of the pipeline structure.
-        
+        Logs a summary of the current pipeline's processing results.
+
         Args:
-            combined_structure (dict): Structure containing pipeline, activities, and dependencies data.
+            pipeline_name (str): Name of the pipeline.
+            activities_count (int): Number of activities in the pipeline.
+            dependencies_count (int): Number of dependencies within the pipeline.
+            file_path (str): The file path of the processed pipeline.
         """
-        for pipeline in combined_structure['pipelines']:
-            pipeline_id = pipeline.get('PipelineId')
-            pipeline_name = pipeline.get('PipelineName', 'Unknown')
-
-            # Count activities associated with this pipeline
-            activities_count = sum(1 for activity in combined_structure['activities'] if activity['ParentId'] == pipeline_id)
-
-            # Count dependencies where both source and target activities belong to this pipeline
-            pipeline_activity_ids = {activity['ActivityId'] for activity in combined_structure['activities'] if activity['ParentId'] == pipeline_id}
-            dependencies_count = sum(
-                1 for dependency in combined_structure['dependencies']
-                if dependency['DependencySourceId'] in pipeline_activity_ids and dependency['DependencyTargetId'] in pipeline_activity_ids
-            )
-
-            # Log pipeline summary
-            self.logger.log_info(f"Pipeline: {pipeline_name}, Activities Count: {activities_count}, Dependencies: {dependencies_count}")
+        self.logger.log_info(f"File: {file_path}, Pipeline: {pipeline_name}, "
+                             f"Activities Count: {activities_count}, Dependencies: {dependencies_count}")
 
     def process_json_files(
         self, 
@@ -60,7 +49,7 @@ class FileProcessor:
         debug=False, 
         save_to_file=False, 
         output_path=None,
-        show_all=False,
+        process_all=True,
         top_n=None
     ) -> Tuple[Dict[str, DataFrame], DataFrame, DataFrame, DataFrame]:
         """
@@ -73,8 +62,8 @@ class FileProcessor:
             debug (bool): Enable debug mode if True.
             save_to_file (bool): Save combined structure to file if True.
             output_path (str): Output path for saving JSON structure.
-            show_all (bool): Show all files in log output if True. If False, limits the log output.
-            top_n (int, optional): Number of files to show in log output if `show_all` is False.
+            process_all (bool): Process all files if True, otherwise limit to `top_n`.
+            top_n (int): Number of files to display in log output if `process_all` is True.
 
         Returns:
             Tuple containing:
@@ -85,31 +74,47 @@ class FileProcessor:
         """
         combined_structure = {"pipelines": [], "activities": [], "dependencies": []}
 
-        # Set default top_n to 10 if top_n is not provided and show_all is False
+        # Set default top_n to 10 if top_n is None
         top_n = top_n if top_n is not None else 10
-        filtered_files = self.file_handler.get_filtered_file_list(show_all=show_all, top_n=top_n)
 
-        # Add a block to group file processing logs
-        self.logger.log_block("File Processing", [])
+        # Fetch all files to process
+        all_files = self.file_handler.get_filtered_file_list(show_all=True)
 
-        for file in filtered_files:
+        # Set files_to_log for logging purposes and files_to_process for processing purposes
+        files_to_log = all_files[:top_n] if process_all else all_files[:top_n]
+        files_to_process = all_files if process_all else all_files[:top_n]
+
+        # Log the processing mode with an information message
+        processing_message = (
+            f"Processing all {len(all_files)} files, displaying top {top_n} in log." if process_all
+            else f"Processing only {top_n} files out of {len(all_files)} based on provided parameters."
+        )
+        self.logger.log_block("File Processing", [processing_message])
+
+        # Process all files but only log up to `top_n` files
+        for idx, file in enumerate(files_to_process):
             try:
+                # Process the file content and convert to hierarchical structure
                 file_content = self.file_handler.get_adf_file_content(file['path'])
                 adf_data = json.loads(file_content)
-                hierarchical_structure, counts = self.converter.build_hierarchical_structure_with_counts(adf_data, include_types, include_empty)
+                hierarchical_structure, counts = self.converter.build_hierarchical_structure_with_counts(
+                    adf_data, include_types, include_empty
+                )
 
+                # Extend the combined structure if hierarchical data is found
                 if hierarchical_structure:
                     combined_structure["pipelines"].extend(hierarchical_structure.get("pipelines", []))
                     combined_structure["activities"].extend(hierarchical_structure.get("activities", []))
                     combined_structure["dependencies"].extend(hierarchical_structure.get("dependencies", []))
 
-                    # Log pipeline summary for the current file
+                    # Extract details for logging
                     pipeline_name = hierarchical_structure['pipelines'][0].get('PipelineName', 'Unknown') if hierarchical_structure['pipelines'] else 'Unknown'
                     activities_count = len(hierarchical_structure.get("activities", []))
                     dependencies_count = len(hierarchical_structure.get("dependencies", []))
 
-                    # Log a single line of info for this file's pipeline
-                    self.logger.log_info(f"File: {file['path']}, Pipeline: {pipeline_name}, Activities Count: {activities_count}, Dependencies: {dependencies_count}")
+                    # Log a single line of info for this file's pipeline, limiting to top_n if needed
+                    if idx < top_n:
+                        self.logger.log_info(f"File: {file['path']}, Pipeline: {pipeline_name}, Activities Count: {activities_count}, Dependencies: {dependencies_count}")
 
             except json.JSONDecodeError as e:
                 self.logger.log_error(f"JSONDecodeError in file {file['path']}: {e}")
