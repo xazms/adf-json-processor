@@ -26,7 +26,7 @@ class FileProcessor:
         self.logger = logger
         self.debug = debug
         self.helper = Helper(spark=spark, logger=logger, debug=debug)
-        self.converter = ADFDataConverter(debug=debug)
+        self.converter = ADFDataConverter(spark=spark, debug=debug)
 
     def log_pipeline_summary(self, pipeline_name, activities_count, dependencies_count, file_path):
         """
