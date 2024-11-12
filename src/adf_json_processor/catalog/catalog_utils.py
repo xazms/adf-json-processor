@@ -3,6 +3,7 @@ from pyspark.sql import SparkSession, DataFrame
 from typing import List, Dict, Optional
 from adf_json_processor.utils.logger import Logger
 from pyspark.sql import Row
+from pyspark.sql import functions as F
 
 class DataManagementHandler:
     def __init__(self, logger: Optional[Logger] = None, debug: bool = False):
@@ -14,9 +15,9 @@ class DataManagementHandler:
         return sqlparse.format(query, reindent=True, keyword_case="upper")
 
     def log_sql_query(self, title: str, query: str):
-        """Logs a formatted SQL query in a readable way."""
+        """Logs a formatted SQL query with a clear 'Executing SQL' message."""
         formatted_query = self._format_sql_query(query)
-        self.logger.log_block(title, [formatted_query])
+        self.logger.log_block(f"{title} - Executing SQL", [formatted_query])
 
     def get_destination_details(self, spark: SparkSession, destination_storage_account: str, df_name: str):
         """Retrieve destination details for each DataFrame."""
@@ -58,7 +59,10 @@ class DataManagementHandler:
         """
         self.log_sql_query("Table Creation Process", create_table_sql)
 
-        if not self.check_if_table_exists(spark, database_name, table_name):
+        # Check if the table already exists and log
+        if self.check_if_table_exists(spark, database_name, table_name):
+            self.logger.log_block("Table Validation", [f"Table already exists: {database_name}.{table_name}"])
+        else:
             spark.sql(create_table_sql)
             df.write.format("delta").mode("overwrite").save(destination_path)
             self.logger.log_message(f"Table {database_name}.{table_name} created and data written.", level="info")
@@ -97,38 +101,59 @@ class DataManagementHandler:
         return spark.sql(f"SELECT * FROM {database_name}.{table_name}")
 
     def log_merge_changes(self, before_df: DataFrame, after_df: DataFrame, key_columns: List[str]):
-        """Logs details of rows that were inserted, updated, or deleted."""
+        """Logs counts of rows that were inserted, updated, or deleted, including when no changes occur."""
         # Identify inserted and deleted rows
         inserted_rows = after_df.join(before_df, key_columns, "left_anti")
         deleted_rows = before_df.join(after_df, key_columns, "left_anti")
 
         # Identify updated rows by comparing columns other than the key columns
         non_key_columns = [col for col in after_df.columns if col not in key_columns]
-        condition = " OR ".join([f"after.{col} != before.{col}" for col in non_key_columns])
+        updated_rows = (
+            after_df.alias("after")
+            .join(before_df.alias("before"), key_columns, "inner")
+            .where(" OR ".join([f"after.{col} != before.{col}" for col in non_key_columns]))
+        )
 
-        updated_rows = after_df.alias("after") \
-                            .join(before_df.alias("before"), key_columns, "inner") \
-                            .where(condition)
-
-        # Count rows in each category
+        # Log counts for each change type
         inserted_count = inserted_rows.count()
-        deleted_count = deleted_rows.count()
         updated_count = updated_rows.count()
+        deleted_count = deleted_rows.count()
 
-        # Create a summary table as a DataFrame
-        summary_data = [
-            Row(ChangeType="Inserted Rows", Count=inserted_count, Example=str(inserted_rows.limit(5).collect()) if inserted_count > 0 else "No rows"),
-            Row(ChangeType="Deleted Rows", Count=deleted_count, Example=str(deleted_rows.limit(5).collect()) if deleted_count > 0 else "No rows"),
-            Row(ChangeType="Updated Rows", Count=updated_count, Example=str(updated_rows.limit(5).collect()) if updated_count > 0 else "No rows")
-        ]
-        
-        summary_df = spark.createDataFrame(summary_data)
+        # Log the counts, even if they are zero
+        self.logger.log_message(f"Inserted Rows: {inserted_count}", level="info")
+        self.logger.log_message(f"Updated Rows: {updated_count}", level="info")
+        self.logger.log_message(f"Deleted Rows: {deleted_count}", level="info")
 
-        # Display the summary table
-        summary_df.show(truncate=False)
+    def delete_missing_records(self, spark: SparkSession, database_name: str, table_name: str, temp_view_name: str, key_columns: List[str]):
+        """Deletes records from the target table that are not present in the source DataFrame, and logs the deletion count."""
+        match_sql = ' AND '.join([f"t.`{col}` = s.`{col}`" for col in key_columns])
+        delete_sql = f"""
+        DELETE FROM {database_name}.{table_name} AS t
+        WHERE NOT EXISTS (
+            SELECT 1 FROM {temp_view_name} AS s
+            WHERE {match_sql}
+        )
+        """
+        # Count records before and after deletion
+        initial_count = spark.table(f"{database_name}.{table_name}").count()
+
+        # Execute delete query
+        self.log_sql_query("Delete Missing Records", delete_sql)
+        spark.sql(delete_sql)
+
+        # Calculate number of deleted records
+        final_count = spark.table(f"{database_name}.{table_name}").count()
+        deleted_count = initial_count - final_count
+
+        # Log deleted count if there are deleted records
+        if deleted_count > 0:
+            self.logger.log_message(
+                f"Records missing from {temp_view_name} have been deleted from {database_name}.{table_name}. Deleted Rows: {deleted_count}",
+                level="info"
+            )
 
     def execute_merge(self, spark: SparkSession, database_name: str, table_name: str, temp_view_name: str, key_columns: List[str]):
-        """Executes the MERGE operation using SQL and logs changes."""
+        """Executes the MERGE operation with deletions and logs changes."""
         # Capture the snapshot of the table before the merge
         before_df = self.capture_table_snapshot(spark, database_name, table_name)
 
@@ -137,7 +162,10 @@ class DataManagementHandler:
         spark.sql(merge_sql)
         self.logger.log_message(f"Data merged into {database_name}.{table_name} using SQL.", level="info")
 
-        # Capture the snapshot of the table after the merge
+        # Perform deletion of records missing from the source DataFrame
+        self.delete_missing_records(spark, database_name, table_name, temp_view_name, key_columns)
+
+        # Capture the snapshot of the table after the merge and deletion
         after_df = self.capture_table_snapshot(spark, database_name, table_name)
 
         # Log detailed changes (inserts, updates, deletes)
