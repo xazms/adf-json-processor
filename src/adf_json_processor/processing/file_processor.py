@@ -9,7 +9,7 @@ class FileProcessor:
     A class to process JSON files, convert them to structured DataFrames, and log summaries.
     """
 
-    def __init__(self, file_handler, spark: SparkSession, config, logger, debug=False):
+    def __init__(self, file_handler, spark, config, logger, debug=False):
         """
         Initialize the FileProcessor with required dependencies.
 

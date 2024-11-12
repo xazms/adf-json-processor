@@ -11,11 +11,12 @@ class ADFDataConverter:
     hierarchical structures, schema definitions, and Spark DataFrame conversions.
     """
 
-    def __init__(self, debug=False):
+    def __init__(self, spark, debug=False):
         """
         Initializes the ADFDataConverter with an optional debug mode and a Helper instance.
         
         Args:
+            spark (SparkSession): The Spark session.
             debug (bool): If True, enable debug-level logging and outputs.
         """
         self.debug = debug
