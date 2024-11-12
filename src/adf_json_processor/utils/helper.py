@@ -11,31 +11,39 @@ class Helper:
     JSON handling, and file operations.
     """
 
-    def __init__(self, logger=None, debug=False):
+    def __init__(self, spark, logger=None, debug=False):
         """
-        Initializes the Helper with optional debug mode and a logger.
+        Initializes the Helper with Spark session, optional debug mode, and a logger.
 
         Args:
+            spark (SparkSession): Spark session for executing SQL queries.
             logger (Logger): Logger instance for structured logging.
             debug (bool): Enable debug-level output if True.
         """
+        self.spark = spark
         self.logger = logger
         self.debug = debug
 
-    def create_temp_views(self, dataframes: dict):
+    def create_temp_views(self, dataframes: dict, preview_rows: int = 5):
         """
-        Create temporary views for each DataFrame in the given dictionary.
+        Create temporary views for each DataFrame in the given dictionary and include a preview in the log.
 
         Args:
             dataframes (dict): Dictionary of DataFrames to create views from.
+            preview_rows (int): Number of rows to display in the preview of each DataFrame.
         """
         created_views = []
+        previews = []
 
+        # Create views and store previews in a list
         for df_name, df in dataframes.items():
             if isinstance(df, DataFrame):  # Ensure the value is a DataFrame
                 view_name = f"view_{df_name}"
                 df.createOrReplaceTempView(view_name)
                 created_views.append(f"{view_name} created successfully")
+
+                # Store SQL query for preview display at the end
+                previews.append((view_name, f"SELECT * FROM {view_name} LIMIT {preview_rows}"))
             else:
                 created_views.append(f"Warning: {df_name} is not a DataFrame. Skipping view creation.")
 
@@ -46,6 +54,11 @@ class Helper:
             print("Temporary Views Creation Summary:")
             for view in created_views:
                 print(view)
+
+        # Display previews for each view at the end
+        for view_name, query in previews:
+            print(f"\n=== Preview of {view_name} ===")
+            self.spark.sql(query).show(truncate=False)
 
     def _generate_hash_key(self, *args):
         """
