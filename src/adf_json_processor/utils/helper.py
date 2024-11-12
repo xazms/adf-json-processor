@@ -58,7 +58,8 @@ class Helper:
         # Display previews for each view at the end
         for view_name, query in previews:
             print(f"\n=== Preview of {view_name} ===")
-            self.spark.sql(query).show(truncate=False)
+            #self.spark.sql(query).show(truncate=False)
+            display(self.spark.sql(query))
 
     def _generate_hash_key(self, *args):
         """
