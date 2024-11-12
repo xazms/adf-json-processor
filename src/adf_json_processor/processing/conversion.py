@@ -19,7 +19,7 @@ class ADFDataConverter:
             debug (bool): If True, enable debug-level logging and outputs.
         """
         self.debug = debug
-        self.helper = Helper(debug=debug)  # Instantiate Helper for internal use
+        self.helper = Helper(spark=spark, debug=debug)
 
     def build_hierarchical_structure_with_counts(self, adf_json: dict, include_types=None, include_empty=False) -> Tuple[dict, dict]:
         """
