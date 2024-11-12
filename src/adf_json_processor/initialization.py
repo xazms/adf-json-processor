@@ -73,7 +73,6 @@ class Initializer:
         Returns:
             Helper: Configured helper instance for utility functions.
         """
-        # Pass the Spark session to Helper
         return Helper(spark=self.spark, logger=self.logger, debug=self.debug)
 
     def _initialize_config_manager(self) -> ConfigManager:

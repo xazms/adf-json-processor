@@ -25,41 +25,50 @@ class Helper:
         self.debug = debug
 
     def create_temp_views(self, dataframes: dict, preview_rows: int = 5):
-        """
-        Create temporary views for each DataFrame in the given dictionary and include a preview in the log.
+            """
+            Create temporary views for each DataFrame in the given dictionary and display a preview.
 
-        Args:
-            dataframes (dict): Dictionary of DataFrames to create views from.
-            preview_rows (int): Number of rows to display in the preview of each DataFrame.
-        """
-        created_views = []
-        previews = []
+            Args:
+                dataframes (dict): Dictionary of DataFrames to create views from.
+                preview_rows (int): Number of rows to display in the preview of each DataFrame.
+            """
+            created_views = []
+            previews = []
 
-        # Create views and store previews in a list
-        for df_name, df in dataframes.items():
-            if isinstance(df, DataFrame):  # Ensure the value is a DataFrame
-                view_name = f"view_{df_name}"
-                df.createOrReplaceTempView(view_name)
-                created_views.append(f"{view_name} created successfully")
+            # Create views and store previews in a list
+            for df_name, df in dataframes.items():
+                if isinstance(df, DataFrame):  # Ensure the value is a DataFrame
+                    view_name = f"view_{df_name}"
+                    df.createOrReplaceTempView(view_name)
+                    created_views.append(f"{view_name} created successfully")
 
-                # Store SQL query for preview display at the end
-                previews.append((view_name, f"SELECT * FROM {view_name} LIMIT {preview_rows}"))
-            else:
-                created_views.append(f"Warning: {df_name} is not a DataFrame. Skipping view creation.")
+                    # Collect the preview data
+                    previews.append((view_name, df.limit(preview_rows)))
+                else:
+                    created_views.append(f"Warning: {df_name} is not a DataFrame. Skipping view creation.")
 
-        # Log the block with the created views if debug is enabled
-        if self.debug and self.logger:
-            self.logger.log_block("Temporary Views Creation Summary", created_views)
-        elif self.debug:
-            print("Temporary Views Creation Summary:")
-            for view in created_views:
-                print(view)
+            # Log the block with the created views if debug is enabled
+            if self.debug and self.logger:
+                self.logger.log_block("Temporary Views Creation Summary", created_views)
+            elif self.debug:
+                print("Temporary Views Creation Summary:")
+                for view in created_views:
+                    print(view)
 
-        # Display previews for each view at the end
-        for view_name, query in previews:
-            print(f"\n=== Preview of {view_name} ===")
-            #self.spark.sql(query).show(truncate=False)
-            display(self.spark.sql(query))
+            # Display previews for each view with actual data rows
+            for view_name, preview_df in previews:
+                print(f"\n=== Preview of {view_name} ===")
+                if preview_df.count() > 0:
+                    try:
+                        # Try to use display if available (Databricks)
+                        if "display" in globals():
+                            display(preview_df)
+                        else:
+                            preview_df.show(truncate=False)
+                    except Exception as e:
+                        print(f"Failed to display preview for {view_name}: {e}")
+                else:
+                    print(f"No data available in {view_name}.")
 
     def _generate_hash_key(self, *args):
         """
