@@ -123,7 +123,7 @@ class FileProcessor:
 
         # Print JSON structure if requested
         if include_json:
-            self.helper.print_json_structure(combined_structure, debug=debug)
+            self.helper.print_json_structure(combined_structure)
 
         # Save JSON structure to a file if requested
         if save_to_file:
