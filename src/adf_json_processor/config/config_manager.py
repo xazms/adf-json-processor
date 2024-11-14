@@ -162,6 +162,15 @@ class ConfigManager:
             f"output_path: {self.output_path}"
         ])
 
+    def get_output_path(self) -> str:
+        """
+        Returns the output path for saving processed data.
+        
+        Returns:
+            str: Path to the output file.
+        """
+        return self.output_path
+
     def get_config(self):
         """
         Returns the configuration dictionary.
