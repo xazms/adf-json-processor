@@ -2,7 +2,6 @@ import sqlparse
 from pyspark.sql import SparkSession, DataFrame
 from typing import List, Dict, Optional
 from adf_json_processor.utils.logger import Logger
-from pyspark.sql import Row
 from pyspark.sql import functions as F
 
 class DataManagementHandler:

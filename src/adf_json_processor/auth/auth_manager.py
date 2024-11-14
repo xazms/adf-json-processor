@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import requests
 from requests.auth import HTTPBasicAuth
 from requests_oauthlib import OAuth2Session
-from oauthlib.oauth2 import BackendApplicationClient  # for OAuth2
+from oauthlib.oauth2 import BackendApplicationClient
 from adf_json_processor.utils.logger import Logger
 
 class AuthStrategy(ABC):
