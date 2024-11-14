@@ -12,7 +12,6 @@ class Initializer:
     Logger, ConfigManager, Helper, AuthStrategy, FileHandler, and FileProcessor, 
     for standardized setup in the ADF processing pipeline.
     """
-
     def __init__(self, dbutils, debug: bool = True, auth_method: str = "PAT"):
         """
         Initialize the Initializer with dbutils, debug mode, and authentication method.
@@ -114,7 +113,14 @@ class Initializer:
         Returns:
             FileProcessor: Configured file processor instance for processing JSON files.
         """
-        return FileProcessor(file_handler=self.file_handler, spark=self.spark, config=self.config_manager, logger=self.logger)
+        return FileProcessor(
+            file_handler=self.file_handler, 
+            spark=self.spark, 
+            config=self.config_manager, 
+            logger=self.logger, 
+            dbutils=self.dbutils,   # Pass dbutils to FileProcessor
+            debug=self.debug
+        )
 
     def get_spark(self) -> SparkSession:
         """Return the initialized Spark session."""
