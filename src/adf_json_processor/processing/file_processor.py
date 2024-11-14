@@ -6,10 +6,7 @@ from adf_json_processor.utils.helper import Helper
 from adf_json_processor.processing.conversion import ADFDataConverter
 
 class FileProcessor:
-    """
-    A class to process JSON files, convert them to structured DataFrames, and log summaries.
-    """
-    def __init__(self, file_handler, spark, config, logger, debug=True):
+    def __init__(self, file_handler, spark, config, logger, dbutils, debug=False):
         """
         Initialize the FileProcessor with required dependencies.
 
@@ -18,12 +15,14 @@ class FileProcessor:
             spark (SparkSession): Spark session for DataFrame operations.
             config: Configuration manager instance.
             logger: Logger instance for logging.
+            dbutils: Databricks utility object for accessing file system operations.
             debug (bool): Enable debug mode if True.
         """
         self.file_handler = file_handler
         self.spark = spark
         self.config = config
         self.logger = logger
+        self.dbutils = dbutils  # Pass dbutils for file handling
         self.debug = debug
         self.helper = Helper(spark=spark, logger=logger, debug=debug)
         self.converter = ADFDataConverter(spark=spark, debug=debug)
@@ -48,28 +47,29 @@ class FileProcessor:
         Args:
             json_data (dict): JSON data to save.
             output_path (str): Path to the file or directory where JSON should be saved.
-            debug (bool): Enable debug mode if True.
+            debug (bool): Override for enabling debug mode if True.
         """
         effective_debug = debug if debug is not None else self.debug
 
-        # Ensure output_path is valid and includes a filename
+        # Validate output_path
         if not output_path:
             self.logger.log_block("File Save Error", ["Error: output_path is empty or not provided."])
             return
 
+        # Ensure output path ends with the filename
         if output_path.endswith("/"):
             output_path = os.path.join(output_path, "combined_hierarchical_pipeline_structure_filtered.json")
 
         # Convert JSON data to a string format
         json_string = json.dumps(json_data, indent=4)
 
-        # Use dbutils to save the JSON data directly to DBFS
         try:
-            dbutils.fs.put(output_path, json_string, overwrite=True)
+            # Use dbutils to write JSON data to the specified DBFS path
+            self.dbutils.fs.put(output_path, json_string, overwrite=True)
             
-            # Verify file exists at specified path
-            if dbutils.fs.ls(os.path.dirname(output_path)):
-                saved_content = dbutils.fs.head(output_path, 10000)  # Adjust limit to capture the full file content as needed
+            # Verify that the file exists at the specified path
+            if self.dbutils.fs.ls(os.path.dirname(output_path)):
+                saved_content = self.dbutils.fs.head(output_path, 10000)  # Adjust to capture more content if needed
                 if effective_debug:
                     self.logger.log_block("File Save Confirmation", [
                         f"File successfully saved to: {output_path}",
@@ -78,9 +78,8 @@ class FileProcessor:
                     ])
             else:
                 self.logger.log_block("File Save Verification", [
-                    f"File save failed: {output_path} does not exist after saving attempt."
+                    f"File save failed: {output_path} does not exist after the save attempt."
                 ])
-
         except Exception as e:
             self.logger.log_block("File Save Error", [f"Error saving JSON to {output_path}: {e}"])
 
@@ -138,7 +137,7 @@ class FileProcessor:
         )
         self.logger.log_block("File Processing", [processing_message])
 
-        # Process all files but only log up to `top_n` files
+        # Process each file in files_to_process
         for idx, file in enumerate(files_to_process):
             try:
                 # Process the file content and convert to hierarchical structure
@@ -154,12 +153,11 @@ class FileProcessor:
                     combined_structure["activities"].extend(hierarchical_structure.get("activities", []))
                     combined_structure["dependencies"].extend(hierarchical_structure.get("dependencies", []))
 
-                    # Extract details for logging
+                    # Log details for this file's pipeline if needed
                     pipeline_name = hierarchical_structure['pipelines'][0].get('PipelineName', 'Unknown') if hierarchical_structure['pipelines'] else 'Unknown'
                     activities_count = len(hierarchical_structure.get("activities", []))
                     dependencies_count = len(hierarchical_structure.get("dependencies", []))
 
-                    # Log a single line of info for this file's pipeline, limiting to top_n if needed
                     if idx < top_n:
                         self.logger.log_info(f"File: {file['path']}, Pipeline: {pipeline_name}, Activities Count: {activities_count}, Dependencies: {dependencies_count}")
 
