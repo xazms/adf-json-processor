@@ -9,8 +9,7 @@ class FileProcessor:
     """
     A class to process JSON files, convert them to structured DataFrames, and log summaries.
     """
-
-    def __init__(self, file_handler, spark, config, logger, debug=False):
+    def __init__(self, file_handler, spark, config, logger, debug=True):
         """
         Initialize the FileProcessor with required dependencies.
 
@@ -42,33 +41,55 @@ class FileProcessor:
         self.logger.log_info(f"File: {file_path}, Pipeline: {pipeline_name}, "
                              f"Activities Count: {activities_count}, Dependencies: {dependencies_count}")
         
-    def save_json_to_file(self, json_data, output_path):
+    def save_json_to_file(self, json_data, output_path, debug=None):
         """
-        Save the provided JSON data to a specified output path. If the output path is a directory,
-        a default filename is appended.
+        Save the provided JSON data to the specified output path on DBFS and confirm the saved content.
 
         Args:
             json_data (dict): JSON data to save.
             output_path (str): Path to the file or directory where JSON should be saved.
+            debug (bool): Enable debug mode if True.
         """
-        # Append default filename if output_path is a directory
-        if os.path.isdir(output_path):
-            output_path = os.path.join(output_path, "combined_structure.json")
+        effective_debug = debug if debug is not None else self.debug
 
+        # Ensure output_path is valid and includes a filename
+        if not output_path:
+            self.logger.log_block("File Save Error", ["Error: output_path is empty or not provided."])
+            return
+
+        if output_path.endswith("/"):
+            output_path = os.path.join(output_path, "combined_hierarchical_pipeline_structure_filtered.json")
+
+        # Convert JSON data to a string format
+        json_string = json.dumps(json_data, indent=4)
+
+        # Use dbutils to save the JSON data directly to DBFS
         try:
-            with open(output_path, 'w') as json_file:
-                json.dump(json_data, json_file, indent=4)
-            if self.debug:
-                print(f"JSON successfully saved to {output_path}")
+            dbutils.fs.put(output_path, json_string, overwrite=True)
+            
+            # Verify file exists at specified path
+            if dbutils.fs.ls(os.path.dirname(output_path)):
+                saved_content = dbutils.fs.head(output_path, 10000)  # Adjust limit to capture the full file content as needed
+                if effective_debug:
+                    self.logger.log_block("File Save Confirmation", [
+                        f"File successfully saved to: {output_path}",
+                        "\n=== Full Content Saved to Output Path ===",
+                        saved_content
+                    ])
+            else:
+                self.logger.log_block("File Save Verification", [
+                    f"File save failed: {output_path} does not exist after saving attempt."
+                ])
+
         except Exception as e:
-            print(f"Error saving JSON to {output_path}: {e}")
+            self.logger.log_block("File Save Error", [f"Error saving JSON to {output_path}: {e}"])
 
     def process_json_files(
         self, 
         include_types=None, 
         include_empty=False, 
         include_json=False, 
-        debug=False, 
+        debug=None, 
         save_to_file=False, 
         output_path=None,
         process_all=True,
@@ -94,6 +115,10 @@ class FileProcessor:
             - activities_df (DataFrame): DataFrame for activities.
             - dependencies_df (DataFrame): DataFrame for dependencies.
         """
+        effective_debug = debug if debug is not None else self.debug
+        if effective_debug:
+            print("Debugging is enabled in process_json_files.")
+        
         combined_structure = {"pipelines": [], "activities": [], "dependencies": []}
 
         # Set default top_n to 10 if top_n is None
@@ -150,7 +175,7 @@ class FileProcessor:
         # Save JSON structure to a file if requested
         if save_to_file:
             output_path = output_path or "combined_structure.json"
-            self.save_json_to_file(combined_structure, output_path)
+            self.save_json_to_file(combined_structure, output_path, debug=effective_debug)
 
         # Convert the combined structure to DataFrames
         dataframes, pipelines_df, activities_df, dependencies_df = self.converter.convert_to_dataframe(self.spark, combined_structure)
