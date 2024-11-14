@@ -40,6 +40,27 @@ class FileProcessor:
         """
         self.logger.log_info(f"File: {file_path}, Pipeline: {pipeline_name}, "
                              f"Activities Count: {activities_count}, Dependencies: {dependencies_count}")
+        
+    def save_json_to_file(self, json_data, output_path):
+        """
+        Save the provided JSON data to a specified output path. If the output path is a directory,
+        a default filename is appended.
+
+        Args:
+            json_data (dict): JSON data to save.
+            output_path (str): Path to the file or directory where JSON should be saved.
+        """
+        # Append default filename if output_path is a directory
+        if os.path.isdir(output_path):
+            output_path = os.path.join(output_path, "combined_structure.json")
+
+        try:
+            with open(output_path, 'w') as json_file:
+                json.dump(json_data, json_file, indent=4)
+            if self.debug:
+                print(f"JSON successfully saved to {output_path}")
+        except Exception as e:
+            print(f"Error saving JSON to {output_path}: {e}")
 
     def process_json_files(
         self, 
@@ -128,7 +149,7 @@ class FileProcessor:
         # Save JSON structure to a file if requested
         if save_to_file:
             output_path = output_path or "combined_structure.json"
-            self.helper.save_json_to_file(combined_structure, output_path)
+            self.save_json_to_file(combined_structure, output_path)
 
         # Convert the combined structure to DataFrames
         dataframes, pipelines_df, activities_df, dependencies_df = self.converter.convert_to_dataframe(self.spark, combined_structure)

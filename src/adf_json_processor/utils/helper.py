@@ -135,24 +135,3 @@ class Helper:
             print("\n" + formatted_json)
         except Exception as e:
             print(f"Error printing JSON structure: {e}")
-
-    def save_json_to_file(self, json_data, output_path):
-        """
-        Save the provided JSON data to a specified output path. If the output path is a directory,
-        a default filename is appended.
-
-        Args:
-            json_data (dict): JSON data to save.
-            output_path (str): Path to the file or directory where JSON should be saved.
-        """
-        # Append default filename if output_path is a directory
-        if os.path.isdir(output_path):
-            output_path = os.path.join(output_path, "combined_structure.json")
-
-        try:
-            with open(output_path, 'w') as json_file:
-                json.dump(json_data, json_file, indent=4)
-            if self.debug:
-                print(f"JSON successfully saved to {output_path}")
-        except Exception as e:
-            print(f"Error saving JSON to {output_path}: {e}")
