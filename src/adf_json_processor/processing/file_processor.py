@@ -40,48 +40,54 @@ class FileProcessor:
         self.logger.log_info(f"File: {file_path}, Pipeline: {pipeline_name}, "
                              f"Activities Count: {activities_count}, Dependencies: {dependencies_count}")
         
-    def save_json_to_file(self, json_data, output_path, debug=None):
+    def save_json_to_file(self, json_data, output_path, debug=None, top_n=None):
         """
         Save the provided JSON data to the specified output path on DBFS and confirm the saved content.
 
         Args:
             json_data (dict): JSON data to save.
             output_path (str): Path to the file or directory where JSON should be saved.
-            debug (bool): Override for enabling debug mode if True.
+            debug (bool): Enable debug mode if True.
+            top_n (int): Number of items to show for each array in the preview. Shows all items if None.
         """
         effective_debug = debug if debug is not None else self.debug
 
-        # Validate output_path
+        # Ensure output_path is valid and includes a filename
         if not output_path:
-            self.logger.log_block("File Save Error", ["Error: output_path is empty or not provided."])
+            self.logger.log_block("File Save Error", ["Error: output_path is empty or not provided."], skip_prefix_for_blank=True)
             return
 
-        # Ensure output path ends with the filename
         if output_path.endswith("/"):
             output_path = os.path.join(output_path, "combined_hierarchical_pipeline_structure_filtered.json")
 
         # Convert JSON data to a string format
         json_string = json.dumps(json_data, indent=4)
 
+        # Use dbutils to save the JSON data directly to DBFS
         try:
-            # Use dbutils to write JSON data to the specified DBFS path
             self.dbutils.fs.put(output_path, json_string, overwrite=True)
             
-            # Verify that the file exists at the specified path
-            if self.dbutils.fs.ls(os.path.dirname(output_path)):
-                saved_content = self.dbutils.fs.head(output_path, 10000)  # Adjust to capture more content if needed
-                if effective_debug:
-                    self.logger.log_block("File Save Confirmation", [
+            # Limit preview to top_n items if specified, otherwise show all items
+            preview_data = {
+                "pipelines": json_data.get("pipelines", [])[:top_n] if top_n is not None else json_data.get("pipelines", []),
+                "activities": json_data.get("activities", [])[:top_n] if top_n is not None else json_data.get("activities", []),
+                "dependencies": json_data.get("dependencies", [])[:top_n] if top_n is not None else json_data.get("dependencies", [])
+            }
+            preview_string = json.dumps(preview_data, indent=4)
+
+            if effective_debug:
+                self.logger.log_block(
+                    "File Save Confirmation", [
                         f"File successfully saved to: {output_path}",
-                        "\n=== Full Content Saved to Output Path ===",
-                        saved_content
-                    ])
-            else:
-                self.logger.log_block("File Save Verification", [
-                    f"File save failed: {output_path} does not exist after the save attempt."
-                ])
+                        "",  # Empty line without prefix
+                        f"=== Preview of Saved Content (Top {top_n} Items) ===" if top_n is not None else "=== Full Content of Saved File ===",
+                        preview_string
+                    ],
+                    skip_prefix_for_blank=True
+                )
+
         except Exception as e:
-            self.logger.log_block("File Save Error", [f"Error saving JSON to {output_path}: {e}"])
+            self.logger.log_block("File Save Error", [f"Error saving JSON to {output_path}: {e}"], skip_prefix_for_blank=True)
 
     def process_json_files(
         self, 
@@ -173,7 +179,7 @@ class FileProcessor:
         # Save JSON structure to a file if requested
         if save_to_file:
             output_path = output_path or "combined_structure.json"
-            self.save_json_to_file(combined_structure, output_path, debug=effective_debug)
+            self.save_json_to_file(combined_structure, output_path, debug=effective_debug, top_n=top_n)
 
         # Convert the combined structure to DataFrames
         dataframes, pipelines_df, activities_df, dependencies_df = self.converter.convert_to_dataframe(self.spark, combined_structure)

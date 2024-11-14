@@ -96,12 +96,10 @@ class Logger:
         
         # Log each content line with the specified logging level
         for line in content_lines:
-            if line.strip():
+            if line.strip():  # Log non-empty lines with prefix
                 self.log_message(f"  {line}", level=level)
-            elif skip_prefix_for_blank:
-                print("")  # Print an empty line without prefix
-            else:
-                self.log_message("", level=level)
+            elif skip_prefix_for_blank:  # Print truly blank lines if skip_prefix_for_blank is True
+                print("")
         
         # Closing separator for the block
         print(f"{separator}\n")
