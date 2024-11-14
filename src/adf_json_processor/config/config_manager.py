@@ -102,7 +102,7 @@ class ConfigManager:
             str: Path to the log file.
         """
         date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/log/error_log_{date_str}.json"
+        return f"/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/log/error_log_{date_str}.json"
 
     def _generate_output_path(self):
         """
