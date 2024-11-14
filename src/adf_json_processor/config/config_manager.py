@@ -111,7 +111,7 @@ class ConfigManager:
         Returns:
             str: Path to the output file.
         """
-        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/combined_hierarchical_pipeline_structure_filtered.json"
+        return f"/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/combined_hierarchical_pipeline_structure_filtered.json"
 
     def ensure_directories_exist(self):
         """
