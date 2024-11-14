@@ -77,7 +77,7 @@ class Logger:
         """Logs a critical message."""
         self.log_message(message, level="critical")
 
-    def log_block(self, header, content_lines, level="info"):
+    def log_block(self, header, content_lines, level="info", skip_prefix_for_blank=False):
         """
         Logs a structured block of messages with a header, content lines, and separators.
         
@@ -85,6 +85,7 @@ class Logger:
             header (str): The header for the block.
             content_lines (list): List of lines to display under the block header.
             level (str): The logging level for each line.
+            skip_prefix_for_blank (bool): If True, skips logging level prefix for blank lines.
         """
         separator_length = 50
         separator = "=" * separator_length
@@ -97,6 +98,10 @@ class Logger:
         for line in content_lines:
             if line.strip():
                 self.log_message(f"  {line}", level=level)
+            elif skip_prefix_for_blank:
+                print("")  # Print an empty line without prefix
+            else:
+                self.log_message("", level=level)
         
         # Closing separator for the block
         print(f"{separator}\n")
