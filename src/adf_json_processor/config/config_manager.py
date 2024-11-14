@@ -36,7 +36,7 @@ class ConfigManager:
         self.dbutils.widgets.text("adfConfig", '["energinet", "DataPlatform_v3.0", "data-factory", "main", "pipeline"]', "ADF Configuration")
         self.dbutils.widgets.text("sourceStorageAccount", "dplandingstoragetest", "Source Storage Account")
         self.dbutils.widgets.text("destinationStorageAccount", "dpuniformstoragetest", "Destination Storage Account")
-        self.dbutils.widgets.text("datasetIdentifier", "xazms", "Dataset Identifier")
+        self.dbutils.widgets.text("datasetIdentifier", "data_quality__adf", "Dataset Identifier")
         self.dbutils.widgets.text("sourceFileName", "*", "Source File Name")
         self.logger.log_end("initialize_widgets")
 
@@ -102,7 +102,7 @@ class ConfigManager:
             str: Path to the log file.
         """
         date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'xazms')}/log/error_log_{date_str}.json"
+        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/log/error_log_{date_str}.json"
 
     def _generate_output_path(self):
         """
@@ -111,7 +111,7 @@ class ConfigManager:
         Returns:
             str: Path to the output file.
         """
-        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'xazms')}/combined_hierarchical_pipeline_structure_filtered.json"
+        return f"/dbfs/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/combined_hierarchical_pipeline_structure_filtered.json"
 
     def ensure_directories_exist(self):
         """
