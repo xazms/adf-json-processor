@@ -1,115 +1,200 @@
-from delta.tables import DeltaTable
-from pyspark.sql import DataFrame
+import sqlparse
+from pyspark.sql import SparkSession, DataFrame
+from typing import List, Dict, Optional
+from adf_json_processor.utils.logger import Logger
 from pyspark.sql import functions as F
 
-def merge_to_catalog(spark, target_table_name, source_df, key_columns):
-    """
-    Merge source_df into the target_table_name using Delta Lake's merge functionality.
-    Detects changes and updates existing records or inserts new ones.
-    
-    Args:
-        spark (SparkSession): The active Spark session.
-        target_table_name (str): The target Delta table name.
-        source_df (DataFrame): The source DataFrame to merge.
-        key_columns (list): List of key columns to perform the merge.
-    """
-    if DeltaTable.isDeltaTable(spark, target_table_name):
-        delta_table = DeltaTable.forName(spark, target_table_name)
+class DataManagementHandler:
+    def __init__(self, logger: Optional[Logger] = None, debug: bool = False):
+        self.logger = logger if logger else Logger(debug=debug)
+        self.debug = debug
 
-        # Get the table version before merge
-        version_before = delta_table.history().select("version").orderBy(F.desc("version")).first()["version"]
-        print(f"\nVersion before merge for {target_table_name}: {version_before}")
+    def _format_sql_query(self, query: str) -> str:
+        """Formats SQL queries using sqlparse for readability."""
+        return sqlparse.format(query, reindent=True, keyword_case="upper")
 
-        # Build merge condition using key_columns
-        merge_condition = " AND ".join([f"target.{key} = source.{key}" for key in key_columns])
+    def log_sql_query(self, title: str, query: str):
+        """Logs a formatted SQL query with a clear 'Executing SQL' message."""
+        formatted_query = self._format_sql_query(query)
+        self.logger.log_block(f"{title} - Executing SQL", [formatted_query])
 
-        # Build change detection condition (excluding DWCreatedDate)
-        data_columns = [c for c in source_df.columns if c != "DWCreatedDate"]
-        change_condition = " OR ".join([f"target.{c} <> source.{c}" for c in data_columns])
+    def get_destination_details(self, spark: SparkSession, destination_storage_account: str, df_name: str):
+        """Retrieve destination details for each DataFrame."""
+        destination_path = f"/mnt/{destination_storage_account}/data_quality__adf_{df_name[:-3]}"
+        database_name = destination_storage_account
+        table_name = f"data_quality__adf_{df_name[:-3]}"
+        
+        self.logger.log_block("Destination Details", [
+            f"Destination Path: {destination_path}",
+            f"Database: {database_name}",
+            f"Table: {table_name}"
+        ])
+        
+        return destination_path, database_name, table_name
 
-        # Perform the merge operation
-        delta_table.alias("target").merge(
-            source_df.alias("source"),
-            merge_condition
-        ).whenMatchedUpdate(
-            condition=F.expr(change_condition),
-            set={col: F.col(f"source.{col}") for col in source_df.columns}
-        ).whenNotMatchedInsertAll().execute()
+    def ensure_path_exists(self, dbutils, destination_path: str):
+        """Ensure that the destination path exists in DBFS."""
+        try:
+            dbutils.fs.ls(destination_path)
+            self.logger.log_block("Path Validation", [f"Path already exists: {destination_path}"])
+        except Exception as e:
+            if "java.io.FileNotFoundException" in str(e):
+                dbutils.fs.mkdirs(destination_path)
+                self.logger.log_block("Path Validation", [f"Path did not exist. Created path: {destination_path}"])
+            else:
+                self.logger.log_message(f"Error while ensuring path exists: {e}", level="error")
+                raise
 
-        version_after = delta_table.history().select("version").orderBy(F.desc("version")).first()["version"]
-        print(f"Merge completed for table {target_table_name}")
+    def create_or_replace_table(self, spark: SparkSession, database_name: str, table_name: str, destination_path: str, temp_view_name: str):
+        """Creates or replaces a Databricks Delta table."""
+        df = spark.table(temp_view_name)
+        schema_str = ",\n    ".join([f"`{field.name}` {field.dataType.simpleString()}" for field in df.schema.fields])
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {database_name}.{table_name} (
+            {schema_str}
+        )
+        USING DELTA
+        LOCATION 'dbfs:{destination_path}/'
+        """
+        self.log_sql_query("Table Creation Process", create_table_sql)
 
-        return version_before, version_after
-    else:
-        # If the table doesn't exist, create it
-        source_df.write.format("delta").saveAsTable(target_table_name)
-        print(f"\nCREATE TABLE {target_table_name}")
-        print(f"Table {target_table_name} created.")
-        return None, None
+        # Check if the table already exists and log
+        if self.check_if_table_exists(spark, database_name, table_name):
+            self.logger.log_block("Table Validation", [f"Table already exists: {database_name}.{table_name}"])
+        else:
+            spark.sql(create_table_sql)
+            df.write.format("delta").mode("overwrite").save(destination_path)
+            self.logger.log_message(f"Table {database_name}.{table_name} created and data written.", level="info")
 
-def truncate_and_reload_fact_table(spark, table_name, fact_df):
-    """
-    Truncate and reload the fact table with new data.
-    
-    Args:
-        spark (SparkSession): The active Spark session.
-        table_name (str): The name of the fact table.
-        fact_df (DataFrame): The DataFrame containing fact data to be loaded.
-    """
-    if DeltaTable.isDeltaTable(spark, table_name):
-        spark.sql(f"TRUNCATE TABLE {table_name}")
-        print(f"TRUNCATE TABLE {table_name}")
-    else:
-        print(f"Table {table_name} does not exist. Creating the table.")
+    def check_if_table_exists(self, spark: SparkSession, database_name: str, table_name: str) -> bool:
+        """Checks if a Databricks Delta table exists in the specified database."""
+        table_check = spark.sql(f"SHOW TABLES IN {database_name}").collect()
+        return any(row["tableName"] == table_name for row in table_check)
 
-    fact_df.write.format("delta").mode("append").saveAsTable(table_name)
-    print(f"TRUNCATE and LOAD {table_name} with new data.")
+    def generate_merge_sql(self, spark: SparkSession, temp_view_name: str, database_name: str, table_name: str, key_columns: List[str]) -> str:
+        """Generates the SQL query for the MERGE operation."""
+        target_columns = [field.name for field in spark.table(f"{database_name}.{table_name}").schema]
+        all_columns = [col for col in spark.table(temp_view_name).columns if col in target_columns and col not in key_columns]
+        
+        match_sql = ' AND '.join([f"s.`{col}` = t.`{col}`" for col in key_columns])
+        update_sql = ',\n        '.join([f"t.`{col}` = s.`{col}`" for col in all_columns])
+        insert_columns = key_columns + all_columns
+        insert_values = [f"s.`{col}`" for col in insert_columns]
 
-def save_to_catalog(spark, nodes_df: DataFrame, links_with_ids: DataFrame):
-    """
-    Save the nodes and links DataFrames to Unity Catalog.
-    Ensure the order of columns in fact table (relationship_id, source_id, target_id, followed by the rest).
-    
-    Args:
-        spark (SparkSession): The active Spark session.
-        nodes_df (DataFrame): DataFrame of nodes to save.
-        links_with_ids (DataFrame): DataFrame of links with IDs to save.
-    """
-    # Define table names
-    catalog_table_name_nodes = "dpuniformstoragetest.dim__adf_activities"
-    catalog_table_name_links_with_ids = "dpuniformstoragetest.fact__adf_activity_relationships"
+        merge_sql = f"""
+        MERGE INTO {database_name}.{table_name} AS t
+        USING {temp_view_name} AS s
+        ON {match_sql}
+        WHEN MATCHED THEN
+            UPDATE SET
+                {update_sql}
+        WHEN NOT MATCHED THEN
+            INSERT ({', '.join([f'`{col}`' for col in insert_columns])})
+            VALUES ({', '.join(insert_values)})
+        """
+        self.log_sql_query("Data Merge", merge_sql)
+        return merge_sql
 
-    # Sort columns for fact table: relationship_id, source_id, target_id, followed by the rest
-    columns_order = ["relationship_id", "source_id", "target_id"] + \
-                    [col for col in links_with_ids.columns if col not in ["relationship_id", "source_id", "target_id"]]
+    def capture_table_snapshot(self, spark: SparkSession, database_name: str, table_name: str) -> DataFrame:
+        """Captures a snapshot of the current state of the Delta table."""
+        return spark.sql(f"SELECT * FROM {database_name}.{table_name}")
 
-    # Reorder columns in fact table (links_with_ids)
-    links_with_ids = links_with_ids.select(columns_order)
+    def log_merge_changes(self, before_df: DataFrame, after_df: DataFrame, key_columns: List[str]):
+        """Logs counts of rows that were inserted, updated, or deleted, including when no changes occur."""
+        # Identify inserted and deleted rows
+        inserted_rows = after_df.join(before_df, key_columns, "left_anti")
+        deleted_rows = before_df.join(after_df, key_columns, "left_anti")
 
-    # Merge Dimension Table, ignoring 'DWCreatedDate' when detecting changes
-    print(f"\nMerging Dimension Table: {catalog_table_name_nodes}")
-    merge_to_catalog(spark, catalog_table_name_nodes, nodes_df, key_columns=['id'])
+        # Identify updated rows by comparing columns other than the key columns
+        non_key_columns = [col for col in after_df.columns if col not in key_columns]
+        updated_rows = (
+            after_df.alias("after")
+            .join(before_df.alias("before"), key_columns, "inner")
+            .where(" OR ".join([f"after.{col} != before.{col}" for col in non_key_columns]))
+        )
 
-    # Truncate and reload the Fact Table
-    print(f"\nTruncating and Loading Fact Table: {catalog_table_name_links_with_ids}")
-    truncate_and_reload_fact_table(spark, catalog_table_name_links_with_ids, links_with_ids)
+        # Log counts for each change type
+        inserted_count = inserted_rows.count()
+        updated_count = updated_rows.count()
+        deleted_count = deleted_rows.count()
 
-    print(f"\nData merged and saved into Unity Catalog.")
+        # Log the counts, even if they are zero
+        self.logger.log_message(f"Inserted Rows: {inserted_count}", level="info")
+        self.logger.log_message(f"Updated Rows: {updated_count}", level="info")
+        self.logger.log_message(f"Deleted Rows: {deleted_count}", level="info")
 
-def print_merge_changes(spark, table_name, version_before, version_after, data_changed):
-    """
-    Print merge changes, showing top 10 rows from the new version of the table or stating no changes.
-    
-    Args:
-        spark (SparkSession): The active Spark session.
-        table_name (str): The Delta table name to check.
-        version_before (int): The version of the table before the merge.
-        version_after (int): The version of the table after the merge.
-        data_changed (bool): Boolean indicating if data was changed.
-    """
-    if data_changed:
-        delta_table = DeltaTable.forName(spark, table_name)
-        print(f"\n=== Changes detected in {table_name} (version {version_after}) ===")
-        delta_table.toDF().limit(10).show(truncate=False)
-    else:
-        print(f"No changes detected in {table_name}. The table version remains the same.")
+    def delete_missing_records(self, spark: SparkSession, database_name: str, table_name: str, temp_view_name: str, key_columns: List[str]):
+        """Deletes records from the target table that are not present in the source DataFrame, and logs the deletion count."""
+        match_sql = ' AND '.join([f"t.`{col}` = s.`{col}`" for col in key_columns])
+        delete_sql = f"""
+        DELETE FROM {database_name}.{table_name} AS t
+        WHERE NOT EXISTS (
+            SELECT 1 FROM {temp_view_name} AS s
+            WHERE {match_sql}
+        )
+        """
+        # Count records before and after deletion
+        initial_count = spark.table(f"{database_name}.{table_name}").count()
+
+        # Execute delete query
+        self.log_sql_query("Delete Missing Records", delete_sql)
+        spark.sql(delete_sql)
+
+        # Calculate number of deleted records
+        final_count = spark.table(f"{database_name}.{table_name}").count()
+        deleted_count = initial_count - final_count
+
+        # Log deleted count if there are deleted records
+        if deleted_count > 0:
+            self.logger.log_message(
+                f"Records missing from {temp_view_name} have been deleted from {database_name}.{table_name}. Deleted Rows: {deleted_count}",
+                level="info"
+            )
+
+    def execute_merge(self, spark: SparkSession, database_name: str, table_name: str, temp_view_name: str, key_columns: List[str]):
+        """Executes the MERGE operation with deletions and logs changes."""
+        # Capture the snapshot of the table before the merge
+        before_df = self.capture_table_snapshot(spark, database_name, table_name)
+
+        # Generate and execute the MERGE SQL
+        merge_sql = self.generate_merge_sql(spark, temp_view_name, database_name, table_name, key_columns)
+        spark.sql(merge_sql)
+        self.logger.log_message(f"Data merged into {database_name}.{table_name} using SQL.", level="info")
+
+        # Perform deletion of records missing from the source DataFrame
+        self.delete_missing_records(spark, database_name, table_name, temp_view_name, key_columns)
+
+        # Capture the snapshot of the table after the merge and deletion
+        after_df = self.capture_table_snapshot(spark, database_name, table_name)
+
+        # Log detailed changes (inserts, updates, deletes)
+        self.log_merge_changes(before_df, after_df, key_columns)
+
+    def manage_data_operation(self, spark: SparkSession, dbutils, dataframes: Dict[str, DataFrame], destination_storage_account: str):
+        """Manages the complete data operation for each DataFrame in `dataframes`."""
+        self.logger.log_start("Data Operation Process")
+        key_columns_dict = {
+            "pipelines_df": ["PipelineId"],
+            "activities_df": ["ActivityId", "ParentId"],
+            "dependencies_df": ["DependencySourceId", "DependencyTargetId"]
+        }
+
+        try:
+            for df_name, df in dataframes.items():
+                temp_view_name = f"view_{df_name}"
+                df.createOrReplaceTempView(temp_view_name)
+
+                destination_path, database_name, table_name = self.get_destination_details(spark, destination_storage_account, df_name)
+
+                self.ensure_path_exists(dbutils, destination_path)
+                self.create_or_replace_table(spark, database_name, table_name, destination_path, temp_view_name)
+
+                if df_name in key_columns_dict:
+                    key_columns = key_columns_dict[df_name]
+                    self.execute_merge(spark, database_name, table_name, temp_view_name, key_columns)
+
+            self.logger.log_end("Data Operation Process", success=True, additional_message="Operation completed successfully.")
+        except Exception as e:
+            self.logger.log_end("Data Operation Process", success=False, additional_message=f"Error: {e}")
+            self.logger.log_message(f"Error managing data operation: {e}", level="error")
+            raise
