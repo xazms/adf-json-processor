@@ -1,5 +1,5 @@
 import logging
-from custom_utils.logging.logger import Logger  # Ensure Logger is properly imported
+from adf_json_processor.utils.logger import Logger
 
 class WidgetManager:
     """
