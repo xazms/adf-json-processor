@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from pyspark.sql import SparkSession
-from adf_json_processor.processing.file_processor import Processor
 from adf_json_processor.utils.logger import Logger
 from adf_json_processor.utils.helper import Helper
+from adf_json_processor.processing.file_processor import Processor
 
 class TestProcessor(unittest.TestCase):
     """Unit tests for the Processor class."""
