@@ -1,17 +1,53 @@
+# ===========================================
+# 🔹 Pre-Commit Configuration
+# ===========================================
+
 repos:
+  # ✅ Standard pre-commit hooks (whitespace, end-of-file, YAML checks)
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0
+    rev: v4.5.0  # Updated to latest stable version
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+      - id: check-json  # ✅ Added JSON validation
+      - id: check-toml  # ✅ Added TOML validation
+      - id: check-merge-conflict  # ✅ Prevents accidental merge conflicts
 
+  # ✅ Python Formatter (Black)
   - repo: https://github.com/psf/black
-    rev: 23.1.0
+    rev: 23.12.0  # Updated to latest stable version
     hooks:
       - id: black
+        language_version: python3.8  # ✅ Explicit Python version for consistency
 
+  # ✅ Python Linter (Flake8)
   - repo: https://github.com/PyCQA/flake8
-    rev: 3.9.2
+    rev: 6.1.0  # Updated to latest stable version
     hooks:
       - id: flake8
+        additional_dependencies:
+          - flake8-bugbear  # ✅ Adds more linting checks
+          - flake8-comprehensions  # ✅ Optimizes list/set/dict comprehensions
+          - flake8-import-order  # ✅ Ensures imports are well-structured
+          - flake8-docstrings  # ✅ Enforces docstring standards
+
+  # ✅ Sort Imports Automatically (isort)
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.12.0  # Latest stable version
+    hooks:
+      - id: isort
+        name: Sort Imports
+        args: ["--profile", "black"]
+
+  # ✅ Security Check for Secrets (Detect Secrets)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0  # Latest version for detecting secrets
+    hooks:
+      - id: detect-secrets-hook
+
+  # ✅ Validate Markdown & YAML files (Ensures Clean Documentation)
+  - repo: https://github.com/digitalmoksha/pre-commit-markdownlint
+    rev: v0.32.0
+    hooks:
+      - id: markdownlint
