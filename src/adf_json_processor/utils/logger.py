@@ -1,149 +1,129 @@
 import logging
 import functools
+import sqlparse
+from pyspark.sql import DataFrame
+from pygments import highlight
+from pygments.lexers import SqlLexer, PythonLexer
+from pygments.formatters import TerminalFormatter
 
 class Logger:
     """
-    A customizable logger class that supports console and file logging, with methods to log
-    information, debug messages, warnings, errors, and critical errors.
-    Provides a structured format for blocks and function entry/exit logging.
+    Custom logger class for enhanced logging functionality, including debugging,
+    block logging, SQL query formatting, Python code formatting, and function entry/exit logging.
     """
 
-    def __init__(self, debug=False, log_to_file=None):
+    def __init__(self, debug: bool = False, log_to_file: str = None):
         """
-        Initializes the Logger with optional file logging and debug-level control.
-        
+        Initialize the Logger.
+
         Args:
             debug (bool): Enable debug-level logging if True.
-            log_to_file (str): Optional file path to log messages to a file.
+            log_to_file (str, optional): Path to log messages to a file.
         """
         self.debug = debug
         self.logger = logging.getLogger("custom_logger")
+        self.logger.propagate = False
 
-        # Ensure no duplicate handlers
+        # Clear existing handlers to prevent duplicate logging
         if self.logger.hasHandlers():
             self.logger.handlers.clear()
 
-        self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
-        self._setup_console_handler()
-        if log_to_file:
-            self._setup_file_handler(log_to_file)
+        # Set log level
+        self.set_level(debug)
 
-    def _setup_console_handler(self):
-        """Sets up console logging with the appropriate debug level and format."""
+        # Define format for logging messages
+        formatter = logging.Formatter('[%(levelname)s] - %(message)s')
+
+        # Console handler
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.DEBUG if self.debug else logging.INFO)
-        console_handler.setFormatter(logging.Formatter('[%(levelname)s] - %(message)s'))
+        console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
-    def _setup_file_handler(self, log_to_file):
-        """
-        Sets up file logging if a log file path is provided.
-        
-        Args:
-            log_to_file (str): File path for saving log messages.
-        """
-        file_handler = logging.FileHandler(log_to_file)
-        file_handler.setFormatter(logging.Formatter('[%(levelname)s] - %(message)s'))
-        self.logger.addHandler(file_handler)
+        # File handler (if provided)
+        if log_to_file:
+            file_handler = logging.FileHandler(log_to_file)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
 
-    def log_message(self, message, level="info"):
-        """
-        Logs a message at the specified level.
-        
-        Args:
-            message (str): Message content.
-            level (str): Logging level ('debug', 'info', 'warning', 'error', 'critical').
-        """
-        log_func = getattr(self.logger, level.lower(), self.logger.info)
-        log_func(message)
+    def set_level(self, debug: bool):
+        """Set the logging level based on the debug flag."""
+        self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
 
-    def log_info(self, message):
-        """Logs an informational message."""
-        self.log_message(message, level="info")
+    def update_debug_mode(self, debug: bool):
+        """Update the debug mode and adjust the logger level."""
+        self.debug = debug
+        self.set_level(debug)
 
-    def log_debug(self, message):
-        """Logs a debug message."""
-        self.log_message(message, level="debug")
+    def log_message(self, message: str, level: str = "info"):
+        """Log a message at the specified level."""
+        log_function = getattr(self.logger, level, self.logger.info)
+        log_function(message)
+        if level in {"error", "critical"}:
+            raise RuntimeError(message)
 
-    def log_warning(self, message):
-        """Logs a warning message."""
-        self.log_message(message, level="warning")
-
-    def log_error(self, message):
-        """Logs an error message."""
-        self.log_message(message, level="error")
-
-    def log_critical(self, message):
-        """Logs a critical message."""
-        self.log_message(message, level="critical")
-
-    def log_block(self, header, content_lines, level="info", skip_prefix_for_blank=False):
-        """
-        Logs a structured block of messages with a header, content lines, and separators.
-        
-        Args:
-            header (str): The header for the block.
-            content_lines (list): List of lines to display under the block header.
-            level (str): The logging level for each line.
-            skip_prefix_for_blank (bool): If True, skips logging level prefix for blank lines.
-        """
-        separator_length = 50
-        separator = "=" * separator_length
+    def log_block(self, header: str, content_lines=None, sql_query=None, level="info"):
+        """Logs structured blocks of information for better readability."""
+        separator_length = 100
+        start_separator = "=" * separator_length
+        end_separator = "-" * separator_length
         formatted_header = f" {header} ".center(separator_length, "=")
 
-        # Print header and separators directly for clarity
-        print(f"\n{separator}\n{formatted_header}\n{separator}")
-        
-        # Log each content line with the specified logging level
-        for line in content_lines:
-            if line.strip():  # Log non-empty lines with prefix
-                self.log_message(f"  {line}", level=level)
-            elif skip_prefix_for_blank:  # Print truly blank lines if skip_prefix_for_blank is True
-                print("")
-        
-        # Closing separator for the block
-        print(f"{separator}\n")
+        print("\n" + start_separator)
+        print(formatted_header)
+        print(start_separator)
 
-    def log_start(self, method_name):
-        """Logs the start of a method."""
-        self.log_info(f"Starting {method_name}...")
+        if content_lines:
+            for line in content_lines:
+                if line.strip():
+                    self.log_message(line, level=level)
 
-    def log_end(self, method_name, success=True, additional_message=""):
-        """
-        Logs the end of a method, indicating success or failure.
-        
-        Args:
-            method_name (str): The method name.
-            success (bool): Indicates success (True) or failure (False).
-            additional_message (str): Optional additional message.
-        """
-        status = "successfully" if success else "with errors"
-        self.log_info(f"Finished {method_name} {status}. {additional_message}")
+        if sql_query:
+            self.log_sql_query(sql_query, level=level)
 
-    def exit_notebook(self, message, dbutils=None):
-        """
-        Exits the notebook with an error message.
-        
-        Args:
-            message (str): Error message to display and log.
-            dbutils: Databricks utility for exiting the notebook.
-        """
-        self.log_error(message)
-        if dbutils:
-            dbutils.notebook.exit(f"[ERROR] {message}")
-        else:
-            raise SystemExit(f"[ERROR] {message}")
+        print(end_separator + "\n")
+
+    def log_sql_query(self, query: str, level: str = "info"):
+        """Format and log an SQL query with syntax highlighting."""
+        formatted_query = sqlparse.format(query, reindent=True, keyword_case='upper')
+        highlighted_query = highlight(formatted_query, SqlLexer(), TerminalFormatter())
+        self.log_message(f"SQL Query:\n{highlighted_query}", level=level)
+
+    def log_python_code(self, code: str, level: str = "info"):
+        """Format and log Python code with syntax highlighting."""
+        highlighted_code = highlight(code, PythonLexer(), TerminalFormatter())
+        self.log_message(f"Python Code:\n{highlighted_code}", level=level)
+
+    def log_start(self, method_name: str):
+        """Log the start of a method."""
+        self.log_message(f"Starting {method_name}...", level="info")
+
+    def log_end(self, method_name: str, success: bool = True, additional_message: str = ""):
+        """Log the end of a method execution."""
+        status = "successfully" if success else "with warnings or issues"
+        self.log_message(f"Finished {method_name} {status}. {additional_message}",
+                         level="info" if success else "warning")
+
+    def log_dataframe_summary(self, df: DataFrame, label: str, level="info"):
+        """Log a summary of a DataFrame."""
+        if df:
+            row_count = df.count()
+            column_count = len(df.columns)
+            estimated_memory = df.rdd.map(lambda row: len(str(row))).sum() / (1024 * 1024)
+            self.log_block(f"{label} DataFrame Info", [
+                f"{label} Estimated Memory Usage: {estimated_memory:.2f} MB",
+                f"{label} Rows: {row_count}",
+                f"{label} Columns: {column_count}",
+                f"{label} Schema:"
+            ], level=level)
+            df.printSchema()
+
+            column_types = [(field.name, field.dataType.simpleString()) for field in df.schema.fields]
+            self.log_block(f"{label} Column Types", [
+                f"Column: {name}, Type: {dtype}" for name, dtype in column_types
+            ], level="debug")
 
     def log_function_entry_exit(self, func):
-        """
-        Decorator to log entry and exit for a function.
-        
-        Args:
-            func (function): The function to decorate.
-        
-        Returns:
-            The wrapped function with entry and exit logging.
-        """
+        """Decorator to log the entry and exit of a function."""
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             self.log_debug(f"Entering {func.__name__} with args: {args}, kwargs: {kwargs}")
@@ -151,3 +131,26 @@ class Logger:
             self.log_debug(f"Exiting {func.__name__} with result: {result}")
             return result
         return wrapper
+
+    def log_info(self, message):
+        """Convenience method for logging informational messages."""
+        self.log_message(message, level="info")
+
+    def log_debug(self, message: str):
+        """Log a debug message."""
+        self.log_message(message, level="debug")
+
+    def log_warning(self, message: str):
+        """Log a warning message."""
+        self.log_message(message, level="warning")
+
+    def log_error(self, message: str):
+        """Log an error message and raise a RuntimeError."""
+        self.log_message(message, level="error")
+
+    def log_critical(self, message: str):
+        """Log a critical message and raise a RuntimeError."""
+        self.log_message(message, level="critical")
+
+# Initialize logger instance for reuse across modules
+logger = Logger(debug=True)
