@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
-from typing import List, Dict
-from custom_utils.logging.logger import Logger
+from typing import List, Dict, Tuple
+from adf_json_processor.utils.logger import Logger
+from .writer import get_destination_path_extended, get_databricks_table_info_extended
 
 # ==============================================================================
 # TableManager Class
@@ -32,7 +33,7 @@ class TableManager:
         self.logger = logger if logger is not None else Logger(debug=False)
         self.logger.log_info("TableManager initialized.")
 
-    def get_destination_details(self, source_datasetidentifier: str) -> (str, str, str):
+    def get_destination_details(self, source_datasetidentifier: str) -> Tuple[str, str, str]:
         """
         Retrieves the destination path, database name, and table name for a given dataset identifier.
         
@@ -43,8 +44,8 @@ class TableManager:
             tuple: (destination_path, database_name, table_name)
         """
         try:
-            destination_path = writer.get_destination_path_extended(self.destination_environment, source_datasetidentifier)
-            database_name, table_name = writer.get_databricks_table_info_extended(self.destination_environment, source_datasetidentifier)
+            destination_path = get_destination_path_extended(self.destination_environment, source_datasetidentifier)
+            database_name, table_name = get_databricks_table_info_extended(self.destination_environment, source_datasetidentifier)
             summary_lines = [
                 f"Destination Path: {destination_path}",
                 f"Database: {database_name}",
@@ -192,7 +193,7 @@ class TableManager:
             duplicates_view_name = f"view_duplicates_{temp_view_name}"
             duplicates_df.createOrReplaceTempView(duplicates_view_name)
             self.logger.log_message(f"Duplicate records found. View created: {duplicates_view_name}", level="info")
-            display(self.spark.sql(f"SELECT * FROM {duplicates_view_name} ORDER BY duplicate_count DESC LIMIT 100"))
+            #display(self.spark.sql(f"SELECT * FROM {duplicates_view_name} ORDER BY duplicate_count DESC LIMIT 100"))
             if remove_duplicates:
                 self.logger.log_message("Duplicates were found and will be removed.", level="info")
                 return self.delete_or_filter_duplicates(temp_view_name, key_columns)
@@ -309,7 +310,7 @@ class TableManager:
                 self.logger.log_message("No newly merged data.", level="info")
             else:
                 self.logger.log_message("Displaying up to 100 rows of newly merged data:", level="info")
-                display(merged_data_df.limit(100))
+                #display(merged_data_df.limit(100))
         except Exception as e:
             self.logger.log_message(f"Error displaying merged data: {e}", level="error")
             raise

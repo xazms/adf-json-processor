@@ -204,16 +204,6 @@ class Logger:
             return result
         return wrapper
 
-# ==============================================================================
-# Logger Initialization
-# ==============================================================================
-# Initialize the custom logger (set debug to True or False as needed).
-logger = Logger(debug=True)
-logger.log_message("Logger initialized successfully.")
-
-# ==============================================================================
-# (Optional) LoggerTester Class for Demonstration
-# ==============================================================================
 class LoggerTester:
     def __init__(self):
         self.logger = Logger(debug=True)
