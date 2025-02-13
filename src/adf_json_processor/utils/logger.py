@@ -83,7 +83,6 @@ class Logger:
 
         if sql_query:
             self.log_sql_query(sql_query, level=level)  # ✅ Log SQL properly
-            output_lines.append(f"🔹 SQL Query Logged at {level.upper()} Level")
 
         output_lines.append(end_separator)
 
