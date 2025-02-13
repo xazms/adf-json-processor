@@ -1,204 +1,188 @@
-from abc import ABC, abstractmethod
 import requests
 from requests.auth import HTTPBasicAuth
-from requests_oauthlib import OAuth2Session
-from oauthlib.oauth2 import BackendApplicationClient
 from adf_json_processor.utils.logger import Logger
 
-class AuthStrategy(ABC):
+class Authenticator:
     """
-    Abstract base class for different authentication strategies for accessing DevOps resources.
-    Provides a common interface for authentication and repository validation.
+    Centralized authentication class to manage and execute different authentication methods.
+    Supports 'PAT' (Personal Access Token) and 'OAuth2'.
     """
 
-    def __init__(self, logger=None):
+    def __init__(self, dbutils=None, auth_method="PAT", debug=False, logger=None):
         """
-        Initialize the AuthStrategy with a logger.
+        Initialize the Authenticator.
 
         Args:
-            logger (Logger): Optional logger instance for logging authentication actions.
+            dbutils (object, optional): Databricks utilities object for secrets and widgets.
+            auth_method (str): The authentication method to use ('PAT' or 'OAuth2').
+            debug (bool): Enable debug-level logging.
+            logger (Logger, optional): Custom logger instance. If not provided, a new instance is created.
         """
-        self.logger = logger or Logger()
+        # Use provided logger or initialize one with the given debug setting.
+        self.logger = logger if logger is not None else Logger(debug=debug)
+        # Use the provided dbutils or grab it from globals.
+        self.dbutils = dbutils or globals().get("dbutils")
+        self.auth_method = auth_method.upper()
+        self.debug = debug
+        self.session = None  # For caching the authenticated session
 
-    @abstractmethod
-    def authenticate(self, url):
-        """Authenticate with the given URL."""
-        pass
+        if not self.dbutils:
+            error_message = "dbutils is required to retrieve secrets or widgets."
+            self.logger.log_message(error_message, level="error")
+            raise ValueError(error_message)
 
-    @abstractmethod
-    def validate_repository(self, adf_config):
-        """Validates the DevOps repository based on ADF configuration."""
-        pass
-
-class PATAuthStrategy(AuthStrategy):
-    """Implements authentication using a Personal Access Token (PAT)."""
-
-    def __init__(self, pat, logger=None):
-        """
-        Initialize the PATAuthStrategy with a Personal Access Token.
-
-        Args:
-            pat (str): Personal Access Token for authentication.
-            logger (Logger): Optional logger instance.
-        """
-        super().__init__(logger)
-        self._pat = pat
-        self._log_authentication_details()
-
-    def _log_authentication_details(self):
-        """Logs masked details of the authentication method for security purposes."""
-        masked_pat = '*' * (len(self._pat) - 4) + self._pat[-4:]
-        self.logger.log_block("Authentication Details", [
-            "Authentication Method: PATAuthStrategy",
-            f"Personal Access Token: {masked_pat}"
-        ])
-
-    def authenticate(self, url):
-        """Performs authentication using PAT with the given URL."""
+        self.logger.log_start("Authenticator Initialization")
         try:
-            response = requests.get(url, auth=HTTPBasicAuth('', self._pat))
-            response.raise_for_status()
-            return response
-        except requests.RequestException as e:
-            self.logger.log_error(f"Authentication failed. Error: {e}")
-            raise
-
-    def validate_repository(self, adf_config):
-        """
-        Validates the DevOps repository by constructing a URL from the ADF configuration.
-
-        Args:
-            adf_config (list): Configuration list with organization, project, and repository details.
-        """
-        organization, project, repository, *_ = adf_config
-        url = f"https://dev.azure.com/{organization}/{project}/_git/{repository}"
-
-        try:
-            response = self.authenticate(url)
-            if response.ok:
-                self.logger.log_block("DevOps Repository Validation", [
-                    f"URL: {url}",
-                    f"Status Code: {response.status_code}",
-                    "Repository validation: Successful"
-                ])
-            else:
-                self.logger.log_error(f"Failed to validate repository. Status Code: {response.status_code}")
+            self.token = self._retrieve_token()
+            self.logger.log_info(f"Authenticator initialized successfully with method '{self.auth_method}'.")
         except Exception as e:
-            self.logger.log_error(f"Repository validation error: {e}")
+            self.logger.log_message(f"Failed to initialize Authenticator: {e}", level="error")
+            raise
+        finally:
+            self.logger.log_end("Authenticator Initialization")
 
-class OAuth2AuthStrategy(AuthStrategy):
-    """Implements OAuth2 authentication for accessing DevOps."""
-
-    def __init__(self, client_id, client_secret, token_url, logger=None, scope=None):
+    def _get_secret(self, scope, key):
         """
-        Initialize the OAuth2AuthStrategy with client credentials.
+        Retrieve a secret from Databricks KeyVault.
 
         Args:
-            client_id (str): OAuth2 client ID.
-            client_secret (str): OAuth2 client secret.
-            token_url (str): URL to obtain the OAuth2 token.
-            logger (Logger): Optional logger instance.
-            scope (list): Scope of access required.
+            scope (str): The secret scope.
+            key (str): The key name.
+
+        Returns:
+            str: The retrieved secret.
         """
-        super().__init__(logger)
-        self._client_id = client_id
-        self._client_secret = client_secret
-        self._token_url = token_url
-        self._scope = scope or []
-        self._session = self._initialize_oauth_session()
-        self._log_authentication_details()
-
-    def _initialize_oauth_session(self):
-        """Creates an OAuth2 session using client credentials and retrieves the access token."""
-        client = BackendApplicationClient(client_id=self._client_id)
-        session = OAuth2Session(client=client, scope=self._scope)
-
         try:
-            session.fetch_token(
-                token_url=self._token_url,
-                client_id=self._client_id,
-                client_secret=self._client_secret
-            )
-        except requests.RequestException as e:
-            self.logger.log_error(f"OAuth2 token retrieval failed. Error: {e}")
-            raise
-        return session
-
-    def _log_authentication_details(self):
-        """Logs details of the OAuth2 authentication for debugging and verification purposes."""
-        self.logger.log_block("Authentication Details", [
-            "Authentication Method: OAuth2AuthStrategy",
-            f"Client ID: {self._client_id[:4]}{'*' * (len(self._client_id) - 4)}"
-        ])
-
-    def authenticate(self, url):
-        """Performs OAuth2 authentication with the provided URL."""
-        try:
-            response = self._session.get(url)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as e:
-            self.logger.log_error(f"OAuth2 authentication failed. Error: {e}")
-            raise
-
-    def validate_repository(self, adf_config):
-        """
-        Validates the DevOps repository by constructing a URL from the ADF configuration.
-
-        Args:
-            adf_config (list): Configuration list with organization, project, and repository details.
-        """
-        organization, project, repository, *_ = adf_config
-        url = f"https://dev.azure.com/{organization}/{project}/_git/{repository}"
-
-        try:
-            response = self.authenticate(url)
-            if response.ok:
-                self.logger.log_block("DevOps Repository Validation", [
-                    f"URL: {url}",
-                    f"Status Code: {response.status_code}",
-                    "Repository validation: Successful"
-                ])
-            else:
-                self.logger.log_error(f"Failed to validate repository. Status Code: {response.status_code}")
+            self.logger.log_debug(f"Retrieving secret '{key}' from scope '{scope}'...")
+            secret = self.dbutils.secrets.get(scope=scope, key=key)
+            if not secret:
+                raise ValueError(f"Secret '{key}' is missing in the scope '{scope}'.")
+            return secret
         except Exception as e:
-            self.logger.log_error(f"Repository validation error: {e}")
+            self.logger.log_error(f"Error retrieving secret '{key}': {e}")
+            raise
 
-def authenticate(auth_method="PAT", dbutils=None, logger=None, tenant_id=None, scope=None):
-    """
-    Factory function to initialize an appropriate authentication strategy.
-
-    Args:
-        auth_method (str): The authentication method, either 'PAT' or 'OAuth2'.
-        dbutils: Databricks utility object for retrieving secrets.
-        logger (Logger): Logger instance for logging authentication details.
-        tenant_id (str): Tenant ID for OAuth2, required if using 'OAuth2'.
-        scope (list): List of scopes required for OAuth2 access.
-
-    Returns:
-        AuthStrategy: An instance of the selected authentication strategy.
-    """
-    if not dbutils:
-        raise ValueError("dbutils is required to retrieve secrets or widgets in this environment.")
-
-    logger = logger or Logger()
-
-    try:
-        if auth_method == "PAT":
-            pat = dbutils.secrets.get(scope="shared-key-vault", key="token-devops-PAT-data-quality")
-            if not pat:
-                raise ValueError("Personal Access Token (PAT) is required but not provided.")
-            return PATAuthStrategy(pat, logger=logger)
-        elif auth_method == "OAuth2":
-            client_id = dbutils.secrets.get(scope="shared-key-vault", key="client-id-devops")
-            client_secret = dbutils.secrets.get(scope="shared-key-vault", key="client-secret-devops")
-            if not tenant_id:
-                raise ValueError("Tenant ID is required for OAuth2 authentication.")
-            token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-            return OAuth2AuthStrategy(client_id, client_secret, token_url, logger=logger, scope=scope)
+    def _retrieve_token(self):
+        """
+        Retrieve the token based on the selected authentication method.
+        """
+        if self.auth_method == "PAT":
+            return self._retrieve_pat_token()
+        elif self.auth_method == "OAUTH2":
+            return self._retrieve_oauth_token()
         else:
-            logger.log_error(f"Unknown authentication method: {auth_method}. Supported methods are 'PAT' and 'OAuth2'.")
-            raise ValueError(f"Unknown authentication method: {auth_method}. Supported methods are 'PAT' and 'OAuth2'.")
-    except Exception as e:
-        logger.log_error(f"Failed to initialize authentication strategy. Error: {e}")
-        raise
+            error_message = f"Unsupported authentication method: {self.auth_method}"
+            self.logger.log_message(error_message, level="error")
+            raise ValueError(error_message)
+
+    def _retrieve_pat_token(self):
+        """
+        Retrieve a Personal Access Token (PAT) from KeyVault.
+
+        Returns:
+            str: The retrieved PAT.
+        """
+        # Retrieve the widget value that indicates the key name for the PAT
+        pat_widget_value = self.dbutils.widgets.get("PersonalAccessTokenKeyVaultName")
+        return self._get_secret("shared-key-vault", pat_widget_value)
+
+    def _retrieve_oauth_token(self):
+        """
+        Retrieve an OAuth2 token using client credentials.
+
+        Returns:
+            str: The retrieved OAuth2 token.
+
+        Raises:
+            ValueError: If the OAuth2 token cannot be retrieved.
+        """
+        try:
+            client_id = self._get_secret("shared-key-vault", "OAuth2ClientId")
+            client_secret = self._get_secret("shared-key-vault", "OAuth2ClientSecret")
+            token_url = self._get_secret("shared-key-vault", "OAuth2TokenUrl")
+
+            payload = {"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret}
+            self.logger.log_debug("Requesting OAuth2 token...")
+            response = requests.post(token_url, data=payload, timeout=10)
+
+            if response.status_code == 200:
+                token = response.json().get("access_token")
+                if not token:
+                    raise ValueError("OAuth2 token is missing in the response.")
+                return token
+            else:
+                raise ValueError(f"Failed to retrieve OAuth2 token: {response.text}")
+        except Exception as e:
+            self.logger.log_error(f"Error retrieving OAuth2 token: {e}")
+            raise
+
+    def get_session(self):
+        """
+        Returns an authenticated session for making requests.
+
+        Returns:
+            requests.Session: A session with authentication headers.
+        """
+        if self.session:
+            return self.session  # Reuse existing session
+
+        self.logger.log_debug("Creating a new authenticated session...")
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": "ADF-Authenticator"})
+
+        if self.auth_method == "PAT":
+            self.session.auth = HTTPBasicAuth("", self.token)
+        elif self.auth_method == "OAUTH2":
+            self.session.headers.update({"Authorization": f"Bearer {self.token}"})
+
+        return self.session
+
+    @staticmethod
+    def initialize(dbutils=None, auth_method="PAT", debug=False, logger=None):
+        """
+        Factory method to initialize the Authenticator class.
+
+        Args:
+            dbutils: Databricks utilities for retrieving secrets.
+            auth_method (str): Authentication method ('PAT' or 'OAuth2').
+            debug (bool): Enable debug-level logging.
+            logger (Logger, optional): A custom logger instance.
+
+        Returns:
+            Authenticator: An initialized Authenticator instance.
+        """
+        temp_logger = logger if logger is not None else Logger(debug=debug)
+
+        if not dbutils:
+            dbutils = globals().get("dbutils")  # Use existing dbutils if available
+
+        if not dbutils:
+            error_message = "dbutils is not available. Ensure it is properly initialized in your environment."
+            temp_logger.log_error(error_message)
+            raise ValueError(error_message)
+
+        try:
+            return Authenticator(dbutils=dbutils, auth_method=auth_method, debug=debug, logger=logger)
+        except Exception as e:
+            temp_logger.log_error(f"Failed to initialize Authenticator: {e}")
+            raise
+
+    def test_authentication(self):
+        """
+        Simple built-in test for initializing the authenticator and verifying functionality.
+        """
+        try:
+            print("🔹 Running Authenticator Test...")
+            # Test if token is retrieved
+            if self.token:
+                print("✅ Authenticator initialized successfully.")
+            else:
+                print("❌ Authenticator failed: No token retrieved.")
+            # Test session creation
+            session = self.get_session()
+            if session:
+                print("✅ Authenticated session created successfully.")
+            else:
+                print("❌ Failed to create an authenticated session.")
+        except Exception as e:
+            print(f"❌ Test failed with error: {e}")

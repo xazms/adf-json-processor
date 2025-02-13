@@ -1,0 +1,61 @@
+# ========================================
+# 🔹 ADF JSON Processor - Configuration
+# ========================================
+
+# ✅ General settings
+project:
+  name: "ADF JSON Processor"
+  version: "0.1.2"
+  description: "Processes ADF JSON files and stores them as Delta tables."
+  author: "Azmir Salihovic"
+  email: "azmir.salihovic@twoday.com"
+
+# ✅ Logging settings
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "[%(levelname)s] - %(message)s"
+  log_to_file: false  # If true, logs are written to `logs/adf_processor.log`
+
+# ✅ Authentication settings
+authentication:
+  method: "PAT"  # Options: PAT (Personal Access Token), OAuth2
+  token_secret_name: "PersonalAccessTokenKeyVaultName"
+  keyvault_scope: "shared-key-vault"
+
+# ✅ Azure DevOps Repository settings
+azure_devops:
+  organization: "energinet"
+  project: "DataPlatform_v3.0"
+  repository: "data-factory"
+  branch: "main"
+  folder_path: "pipeline"
+
+# ✅ Storage settings
+storage:
+  source_account: "dplandingstoragetest"
+  destination_account: "dpuniformstoragetest"
+  dataset_identifier: "data_quality__adf"
+  source_filename: "*"
+
+# ✅ Processing settings
+processing:
+  include_types: ["DatabricksNotebook", "ExecutePipeline", "ExecuteDataFlow"]
+  debug_mode: false  # Enables detailed logging/debugging
+  remove_duplicates: true  # Automatically removes duplicates in merge
+
+# ✅ Table Management settings
+table_management:
+  create_if_not_exists: true
+  merge_strategy: "upsert"  # Options: upsert, append, replace
+  default_partition_column: "CreatedDate"
+
+# ✅ Testing & Validation settings
+testing:
+  enable_tests: true
+  test_file: "sample_adf_pipeline.json"
+
+# ✅ GitHub Actions CI settings
+ci:
+  enabled: true
+  lint_checks: ["flake8", "black"]
+  test_runner: "pytest"

@@ -1,0 +1,12 @@
+# Core dependencies
+requests>=2.26        # Required for API requests
+pyspark>=3.2          # Required for Spark DataFrame processing
+sqlparse              # Required for SQL formatting
+pygments              # Required for syntax highlighting in logs
+
+# Development dependencies
+pytest                # Testing framework
+pytest-cov            # Test coverage reporting
+flake8                # Linting for code style enforcement
+black                 # Code formatter
+pre-commit            # Pre-commit hooks for automatic formatting

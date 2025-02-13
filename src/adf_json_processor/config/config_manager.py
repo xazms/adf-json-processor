@@ -1,193 +1,219 @@
-import json
 import os
 import datetime
+import ast
 from adf_json_processor.utils.logger import Logger
 
-class ConfigManager:
+class Config:
     """
-    Manages configuration for Azure Data Factory (ADF) pipelines by setting up Databricks widgets
-    and managing directory paths for logging and outputs. Provides utility functions to handle
-    directory structure and configuration validation.
+    Configuration class for managing and initializing settings, paths, and parameters.
+    Uses an Authenticator instance for authentication.
     """
 
-    def __init__(self, dbutils, logger=None):
+    def __init__(self, dbutils=None, authenticator=None, debug=False, logger=None):
         """
-        Initializes the ConfigManager with dbutils for widget access and an optional logger.
-        
+        Initialize the Config object.
+
         Args:
-            dbutils: Databricks utility object for accessing widgets.
-            logger (Logger): Optional logger instance for structured logging.
+            dbutils (object): Databricks utilities object.
+            authenticator (Authenticator): Instance of the Authenticator class for managing authentication.
+            debug (bool): Enable detailed logging if True.
+            logger (Logger, optional): Custom logger instance. If not provided, a new Logger is created.
         """
-        if not dbutils:
-            raise ValueError("dbutils is required to manage widgets in this environment.")
-        
-        self.dbutils = dbutils
-        self.config = {}
-        self.logger = logger or Logger()
-        # Expose log and output paths as attributes
-        self.log_path = self._generate_log_path()
-        self.output_path = self._generate_output_path()
+        # Use provided logger or create a new one
+        self.logger = logger if logger is not None else Logger(debug=debug)
+        self.dbutils = dbutils or globals().get("dbutils")  # Use global dbutils if available
+        self.authenticator = authenticator
+        self.debug = debug
 
-    def initialize_widgets(self):
-        """
-        Sets up Databricks widgets for ADF pipeline configuration and other storage-related parameters.
-        """
-        self.logger.log_start("initialize_widgets")
-        self.dbutils.widgets.text("adfConfig", '["energinet", "DataPlatform_v3.0", "data-factory", "main", "pipeline"]', "ADF Configuration")
-        self.dbutils.widgets.text("sourceStorageAccount", "dplandingstoragetest", "Source Storage Account")
-        self.dbutils.widgets.text("destinationStorageAccount", "dpuniformstoragetest", "Destination Storage Account")
-        self.dbutils.widgets.text("datasetIdentifier", "data_quality__adf", "Dataset Identifier")
-        self.dbutils.widgets.text("sourceFileName", "*", "Source File Name")
-        self.logger.log_end("initialize_widgets")
+        if not self.dbutils:
+            self.logger.log_error("dbutils is required to retrieve secrets or widgets.")
+            raise ValueError("dbutils is required to retrieve secrets or widgets.")
 
-    def load_config(self):
-        """
-        Loads and validates widget values, stores them in the config attribute, logs the configuration settings,
-        ensures directories exist, and logs optional configuration paths.
-        """
-        self.logger.log_start("load_config")
+        if not self.authenticator:
+            self.logger.log_error("Authenticator instance is required.")
+            raise ValueError("Authenticator instance is required.")
+
+        self.logger.log_info("Initializing Config...")
+
         try:
-            # Load and validate configuration
-            self._load_main_config()
-            self.logger.log_block("Loaded Configuration", [f"{k}: {v}" for k, v in self.config.items()])
-
-            # Log optional paths right after main configuration
-            self._log_optional_paths()
-
-            # Ensure directories exist
-            self.ensure_directories_exist()
-        except (ValueError, json.JSONDecodeError) as e:
-            self.logger.log_error(f"Configuration loading error: {e}")
-            raise
+            self._initialize_config()
+            self._validate_config()
+            self.logger.log_info("Config initialized successfully.")
         except Exception as e:
-            self.logger.log_error(f"Unexpected error during configuration loading: {e}")
-            raise ValueError("Unexpected error during configuration loading.")
-        self.logger.log_end("load_config")
+            self.logger.log_error(f"Failed to initialize Config: {e}")
+            raise
 
-    def _load_main_config(self):
+    def _get_widget_value(self, widget_name):
         """
-        Retrieves and parses main configuration values from widgets and stores them in `self.config`.
-        """
-        adf_config_str = self.dbutils.widgets.get("adfConfig")
-        self.config["adfConfig"] = self._parse_and_validate_adf_config(adf_config_str)
-        self.config["sourceStorageAccount"] = self.dbutils.widgets.get("sourceStorageAccount")
-        self.config["destinationStorageAccount"] = self.dbutils.widgets.get("destinationStorageAccount")
-        self.config["datasetIdentifier"] = self.dbutils.widgets.get("datasetIdentifier")
-        self.config["sourceFileName"] = self.dbutils.widgets.get("sourceFileName")
+        Retrieve a widget value safely.
 
-    def _parse_and_validate_adf_config(self, adf_config_str):
-        """
-        Parses and validates the adfConfig JSON string.
-        
         Args:
-            adf_config_str (str): JSON string containing ADF configuration.
-        
+            widget_name (str): The widget name.
+
         Returns:
-            list: Parsed configuration as a list if valid.
-        
-        Raises:
-            ValueError: If the configuration is invalid.
+            str: The retrieved widget value.
         """
-        adf_config = json.loads(adf_config_str)
-        if len(adf_config) < 5:
-            self.logger.log_error("ADF Configuration requires 5 elements.")
-            raise ValueError("ADF Configuration requires 5 elements: organization, project, repository, branch, and folder path.")
-        return adf_config
+        try:
+            value = self.dbutils.widgets.get(widget_name)
+            if self.debug:
+                self.logger.log_debug(f"Retrieved widget '{widget_name}': {value}")
+            return value
+        except Exception as e:
+            self.logger.log_error(f"Error retrieving widget '{widget_name}': {e}")
+            raise
 
-    def _generate_log_path(self):
+    def _initialize_config(self):
         """
-        Generates a log path based on the current timestamp.
-        
+        Internal method to initialize configuration settings and paths.
+        """
+        self.logger.log_debug("Parsing ADF configuration...")
+
+        # Parse ADF configuration from widgets
+        adf_config_str = self._get_widget_value("ADFConfig")
+        adf_config = ast.literal_eval(adf_config_str)
+
+        (
+            self.organization,
+            self.project,
+            self.repository,
+            self.branch,
+            self.folder_path,
+        ) = adf_config
+
+        self.source_storage_account = self._get_widget_value("SourceStorageAccount")
+        self.destination_storage_account = self._get_widget_value("DestinationStorageAccount")
+        self.datasetidentifier = self._get_widget_value("Datasetidentifier")
+        self.source_filename = self._get_widget_value("SourceFileName")
+
+        # Store ADF details in a structured dictionary
+        self.adf_details = {
+            "Organization": self.organization,
+            "Project": self.project,
+            "Repository": self.repository,
+            "Branch": self.branch,
+            "Folder Path": self.folder_path,
+        }
+
+        # Generate paths
+        self.log_path = self._get_directory_path("log", f"error_log_{self._get_timestamp()}.json")
+        self.output_path = self._get_directory_path("output", "combined_hierarchical_pipeline_structure_filtered.json")
+
+        # Ensure directories exist
+        self._ensure_directories_exist()
+
+    def _get_timestamp(self):
+        """
+        Generate a timestamp for file paths.
+
         Returns:
-            str: Path to the log file.
+            str: Current timestamp as a string.
         """
-        date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/log/error_log_{date_str}.json"
+        return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    def _generate_output_path(self):
+    def _get_directory_path(self, directory_type, filename):
         """
-        Generates an output path for the processed file.
-        
-        Returns:
-            str: Path to the output file.
-        """
-        return f"/mnt/{self.config.get('sourceStorageAccount', 'dplandingstoragetest')}/{self.config.get('datasetIdentifier', 'data_quality__adf')}/combined_hierarchical_pipeline_structure_filtered.json"
+        Construct a full directory path.
 
-    def ensure_directories_exist(self):
-        """
-        Ensures that required directories exist in the file system.
-        Logs whether each directory already exists or was created.
-        """
-        self.logger.log_start("ensure_directories_exist")
-        log_dir, output_dir = os.path.dirname(self.log_path), os.path.dirname(self.output_path)
-        dir_statuses = self._check_and_create_directories(log_dir, output_dir)
-        self.logger.log_block("Directory Statuses", dir_statuses)
-        self.logger.log_end("ensure_directories_exist")
-
-    def _check_and_create_directories(self, log_dir, output_dir):
-        """
-        Helper method to check and create directories as needed.
-        
         Args:
-            log_dir (str): Path for the log directory.
-            output_dir (str): Path for the output directory.
-        
+            directory_type (str): The directory type ('log' or 'output').
+            filename (str): The filename.
+
         Returns:
-            list: Status messages indicating whether directories existed or were created.
+            str: Full path for the file.
         """
-        dir_statuses = []
-        if 'dbutils' in globals():  # Databricks environment
-            for dir_path, dir_type in [(log_dir, "Log"), (output_dir, "Output")]:
-                try:
-                    self.dbutils.fs.ls(dir_path)
-                    dir_statuses.append(f"{dir_type} directory already exists in DBFS: {dir_path}")
-                except Exception:
+        base_path = f"/dbfs/mnt/{self.source_storage_account}/{self.datasetidentifier}"
+        return os.path.join(base_path, directory_type, filename)
+
+    def _validate_config(self):
+        """
+        Validate configuration settings to ensure they are correctly initialized.
+        """
+        required_fields = {
+            "organization": self.organization,
+            "project": self.project,
+            "repository": self.repository,
+            "branch": self.branch,
+            "folder_path": self.folder_path,
+            "source_storage_account": self.source_storage_account,
+            "destination_storage_account": self.destination_storage_account,
+            "datasetidentifier": self.datasetidentifier,
+        }
+
+        missing_fields = [key for key, value in required_fields.items() if not value]
+        if missing_fields:
+            self.logger.log_error(f"Missing required configuration fields: {', '.join(missing_fields)}")
+            raise ValueError(f"Missing required configuration fields: {', '.join(missing_fields)}")
+
+        self.logger.log_debug("Configuration validated successfully.")
+
+    def _ensure_directories_exist(self):
+        """
+        Ensure that required directories exist in the file system.
+        """
+        try:
+            for path in [self.log_path, self.output_path]:
+                dir_path = os.path.dirname(path)
+                # If running in Databricks, use dbutils.fs.mkdirs; otherwise, use os.makedirs.
+                if "dbutils" in globals():
                     self.dbutils.fs.mkdirs(dir_path)
-                    dir_statuses.append(f"{dir_type} directory created in DBFS: {dir_path}")
-        else:  # Local environment
-            for dir_path, dir_type in [(log_dir, "Log"), (output_dir, "Output")]:
-                if os.path.exists(dir_path):
-                    dir_statuses.append(f"{dir_type} directory already exists locally: {dir_path}")
                 else:
-                    os.makedirs(dir_path)
-                    dir_statuses.append(f"{dir_type} directory created locally: {dir_path}")
-        return dir_statuses
+                    os.makedirs(dir_path, exist_ok=True)
+            self.logger.log_info("Required directories validated successfully.")
+        except Exception as e:
+            self.logger.log_error(f"Failed to create directories: {e}")
+            raise
 
-    def _log_optional_paths(self):
+    def print_configuration(self):
         """
-        Logs additional configuration paths for optional outputs.
+        Print all configuration parameters in a structured format.
         """
-        self.logger.log_block("Optional Configuration", [
-            f"log_path: {self.log_path}",
-            f"output_path: {self.output_path}"
-        ])
+        self.logger.log_block("ADF Configuration", [f"{key}: {value}" for key, value in self.adf_details.items()], level="info")
+        self.logger.log_block("Storage Configuration", [
+            f"Source Storage Account: {self.source_storage_account}",
+            f"Destination Storage Account: {self.destination_storage_account}",
+            f"Dataset Identifier: {self.datasetidentifier}",
+            f"Source Filename: {self.source_filename}",
+        ], level="info")
 
-    def get_output_path(self) -> str:
+    @staticmethod
+    def initialize(dbutils=None, authenticator=None, debug=False, logger=None):
         """
-        Returns the output path for saving processed data.
-        
-        Returns:
-            str: Path to the output file.
-        """
-        return self.output_path
-
-    def get_config(self):
-        """
-        Returns the configuration dictionary.
-        
-        Returns:
-            dict: Configuration dictionary.
-        """
-        return self.config
-
-    def unpack(self, scope):
-        """
-        Unpacks configuration variables into the given scope.
+        Factory method to initialize the Config class.
 
         Args:
-            scope (dict): The scope to unpack configuration variables into, like `globals()`.
+            dbutils (object): Databricks utilities object.
+            authenticator (Authenticator): Instance of the Authenticator class.
+            debug (bool): Enable detailed logging if True.
+            logger (Logger, optional): Custom logger instance.
+
+        Returns:
+            Config: An initialized Config instance.
         """
-        for key, value in self.config.items():
-            scope[key] = value
-        scope['log_path'] = self.log_path
-        scope['output_path'] = self.output_path
+        temp_logger = logger if logger is not None else Logger(debug=debug)
+
+        if not dbutils:
+            dbutils = globals().get("dbutils")
+
+        if not dbutils:
+            temp_logger.log_error("dbutils is not available. Ensure it is properly initialized.")
+            raise ValueError("dbutils is required.")
+
+        try:
+            return Config(dbutils=dbutils, authenticator=authenticator, debug=debug, logger=logger)
+        except Exception as e:
+            temp_logger.log_error(f"Failed to initialize Config: {e}")
+            raise
+
+    def test_config(self):
+        """
+        Simple built-in test for initializing Config and verifying functionality.
+        """
+        try:
+            print("🔹 Running Config Test...")
+            # Check if required fields are set
+            assert self.organization, "❌ Organization not set!"
+            assert self.source_storage_account, "❌ Source Storage Account not set!"
+            assert self.datasetidentifier, "❌ Dataset Identifier not set!"
+            print("✅ Config Test Passed Successfully!")
+        except Exception as e:
+            print(f"❌ Config Test Failed: {e}")

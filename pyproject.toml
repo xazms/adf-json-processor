@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "adf-json-processor"
+version = "0.1.2"
+description = "ADF JSON Processor for Azure Data Lake"
+authors = ["Azmir Salihovic <azmir.salihovic@twoday.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/xazms/adf-json-processor"
+
+[tool.poetry.dependencies]
+python = ">=3.8"
+requests = "^2.26"
+pyspark = "^3.2"
+setuptools = "^58.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "6.2.5"
+flake8 = "4.0.1"
+black = "22.3.0"
+pre-commit = "2.15.0"
+
+[tool.poetry.scripts]
+process-adf = "adf_json_processor.processing.file_processor:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
