@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from adf_json_processor.utils.logger import Logger
 from adf_json_processor.storage.writer import get_destination_path_extended, get_databricks_table_info_extended
 
@@ -32,7 +32,7 @@ class TableManager:
         self.logger = logger if logger else Logger(debug=False)
         self.logger.log_info("✅ TableManager initialized.")
 
-    def get_destination_details(self, source_datasetidentifier: str) -> (str, str, str):
+    def get_destination_details(self, source_datasetidentifier: str) -> Tuple[str, str, str]:
         """
         Retrieves the destination path, database name, and table name for a given dataset identifier.
 
