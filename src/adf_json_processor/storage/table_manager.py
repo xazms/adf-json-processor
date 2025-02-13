@@ -1,119 +1,125 @@
 from pyspark.sql import SparkSession
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from adf_json_processor.utils.logger import Logger
-from .writer import get_destination_path_extended, get_databricks_table_info_extended
+from adf_json_processor.storage.writer import get_destination_path_extended, get_databricks_table_info_extended
 
-# ==============================================================================
-# TableManager Class
-# ==============================================================================
+# ==============================================================================  
+# TableManager Class  
+# ==============================================================================  
 class TableManager:
     """
     Manages the creation and merging of Databricks Delta tables.
-    
-    The class provides two main functionalities:
-      1. create_table: Create a new Delta table from a temporary view.
-      2. merge_table: Merge new data from a temporary view into an existing Delta table.
-    
-    Both functions log their operations using a custom Logger.
+
+    Functionality:
+      1. `create_table`: Creates a new Delta table from a temporary view.
+      2. `merge_table`: Merges new data into an existing Delta table.
+      3. `validate_and_create_duplicate_view`: Checks for duplicates and optionally removes them.
     """
 
     def __init__(self, spark: SparkSession, dbutils, destination_environment: str, logger: Logger = None):
         """
-        Initialize the TableManager.
-        
+        Initializes the TableManager.
+
         Args:
             spark (SparkSession): Active Spark session.
             dbutils: Databricks utilities.
-            destination_environment (str): Destination storage environment (e.g. storage account name).
+            destination_environment (str): Destination storage environment (e.g., storage account name).
             logger (Logger, optional): Custom logger instance. If not provided, a default logger is created.
         """
         self.spark = spark
         self.dbutils = dbutils
         self.destination_environment = destination_environment
-        self.logger = logger if logger is not None else Logger(debug=False)
-        self.logger.log_info("TableManager initialized.")
+        self.logger = logger if logger else Logger(debug=False)
+        self.logger.log_info("✅ TableManager initialized.")
 
-    def get_destination_details(self, source_datasetidentifier: str) -> Tuple[str, str, str]:
+    def get_destination_details(self, source_datasetidentifier: str) -> (str, str, str):
         """
         Retrieves the destination path, database name, and table name for a given dataset identifier.
-        
+
         Args:
             source_datasetidentifier (str): Source dataset identifier.
-        
+
         Returns:
             tuple: (destination_path, database_name, table_name)
         """
         try:
             destination_path = get_destination_path_extended(self.destination_environment, source_datasetidentifier)
-            database_name, table_name = get_databricks_table_info_extended(self.destination_environment, source_datasetidentifier)
-            summary_lines = [
+            database_name = self.destination_environment  # Database is based on the environment
+            table_name = source_datasetidentifier  # Table name is derived from dataset identifier
+
+            self.logger.log_block("Destination Details", [
                 f"Destination Path: {destination_path}",
                 f"Database: {database_name}",
                 f"Table: {table_name}"
-            ]
-            self.logger.log_block("Destination Details", summary_lines, level="info")
+            ], level="info")
+
             return destination_path, database_name, table_name
         except Exception as e:
-            self.logger.log_message(f"Error retrieving destination details: {e}", level="error")
+            self.logger.log_error(f"Error retrieving destination details: {e}")
             raise
 
     def ensure_path_exists(self, destination_path: str):
         """
         Ensures that the destination path exists in DBFS, creating it if necessary.
-        
+
         Args:
             destination_path (str): Destination path.
         """
         try:
             self.dbutils.fs.ls(destination_path)
-            self.logger.log_message(f"Path already exists: {destination_path}", level="info")
+            self.logger.log_info(f"✅ Path already exists: {destination_path}")
         except Exception as e:
             if "java.io.FileNotFoundException" in str(e):
                 self.dbutils.fs.mkdirs(destination_path)
-                self.logger.log_message(f"Path did not exist. Created path: {destination_path}", level="info")
+                self.logger.log_info(f"📂 Path did not exist. Created: {destination_path}")
             else:
-                self.logger.log_message(f"Error ensuring path exists: {e}", level="error")
+                self.logger.log_error(f"Error ensuring path exists: {e}")
                 raise
 
     def check_if_table_exists(self, database_name: str, table_name: str) -> bool:
         """
         Checks if a Delta table exists in the specified database.
-        
+
         Args:
             database_name (str): Target database.
             table_name (str): Target table.
-        
+
         Returns:
             bool: True if the table exists, False otherwise.
         """
         try:
+            self.logger.log_message(f"Checking existence of table: {database_name}.{table_name}", level="info")
+
+            # Corrected SQL statement
             table_check = self.spark.sql(f"SHOW TABLES IN {database_name}").collect()
             exists = any(row["tableName"] == table_name for row in table_check)
-            if not exists:
+
+            if exists:
+                self.logger.log_message(f"✅ Table {database_name}.{table_name} exists.", level="info")
+            else:
                 self.logger.log_message(f"Table {database_name}.{table_name} does not exist.", level="info")
+
             return exists
+
         except Exception as e:
             self.logger.log_message(f"Error checking table existence: {e}", level="error")
             raise
 
-    # -------------------------
-    # Table Creation Functionality
-    # -------------------------
     def create_table(self, source_datasetidentifier: str, temp_view_name: str):
         """
         Creates a new Delta table from a temporary view.
-        
+
         Args:
             source_datasetidentifier (str): Source dataset identifier.
-            temp_view_name (str): Name of the temporary view containing the source data.
+            temp_view_name (str): Temporary view containing the source data.
         """
         try:
             destination_path, database_name, table_name = self.get_destination_details(source_datasetidentifier)
             self.ensure_path_exists(destination_path)
-            
+
             df = self.spark.table(temp_view_name)
-            # Build a string representation of the schema.
             schema_str = ",\n    ".join([f"`{field.name}` {field.dataType.simpleString()}" for field in df.schema.fields])
+
             create_table_sql = f"""
             CREATE TABLE IF NOT EXISTS {database_name}.{table_name} (
                 {schema_str}
@@ -121,22 +127,15 @@ class TableManager:
             USING DELTA
             LOCATION 'dbfs:{destination_path}/'
             """
-            self.logger.log_block("Create Table Query", sql_query=create_table_sql, level="info")
-            
-            if not self.check_if_table_exists(database_name, table_name):
-                self.spark.sql(create_table_sql)
-                self.logger.log_message(f"Table {database_name}.{table_name} created.", level="info")
-                df.write.format("delta").mode("overwrite").save(destination_path)
-                self.logger.log_message(f"Data written to {destination_path}.", level="info")
-            else:
-                self.logger.log_message(f"Table {database_name}.{table_name} already exists.", level="info")
+            self.logger.log_sql_query(create_table_sql, level="info")
+
+            self.spark.sql(create_table_sql)
+            self.logger.log_info(f"✅ Table `{database_name}.{table_name}` is ready.")
+
         except Exception as e:
-            self.logger.log_message(f"Error creating table: {e}", level="error")
+            self.logger.log_error(f"Error creating table: {e}")
             raise
 
-    # -------------------------
-    # Table Merge Functionality
-    # -------------------------
     def delete_or_filter_duplicates(self, temp_view_name: str, key_columns: List[str]) -> str:
         """
         Deletes or filters out duplicate records from the temporary view based on key columns.
@@ -169,16 +168,7 @@ class TableManager:
 
     def validate_and_create_duplicate_view(self, temp_view_name: str, key_columns: List[str], remove_duplicates: bool = False) -> str:
         """
-        Validates the temporary view for duplicate records based on key columns.
-        If duplicates are found, creates a duplicates view and either removes them or raises an error.
-        
-        Args:
-            temp_view_name (str): Name of the temporary view.
-            key_columns (List[str]): Key columns.
-            remove_duplicates (bool): Whether to automatically remove duplicates.
-        
-        Returns:
-            str: The (new) temporary view name after duplicates are handled.
+        Ensures duplicates are handled properly.
         """
         key_columns_str = ', '.join(key_columns)
         duplicate_keys_query = f"""
@@ -187,58 +177,58 @@ class TableManager:
         GROUP BY {key_columns_str}
         HAVING COUNT(*) > 1
         """
-        self.logger.log_block("Duplicate Keys Query", sql_query=duplicate_keys_query, level="debug")
+        
         duplicates_df = self.spark.sql(duplicate_keys_query)
+
         if duplicates_df.count() > 0:
             duplicates_view_name = f"view_duplicates_{temp_view_name}"
             duplicates_df.createOrReplaceTempView(duplicates_view_name)
             self.logger.log_message(f"Duplicate records found. View created: {duplicates_view_name}", level="info")
-            #display(self.spark.sql(f"SELECT * FROM {duplicates_view_name} ORDER BY duplicate_count DESC LIMIT 100"))
+
             if remove_duplicates:
-                self.logger.log_message("Duplicates were found and will be removed.", level="info")
-                return self.delete_or_filter_duplicates(temp_view_name, key_columns)
+                return self.delete_or_filter_duplicates(temp_view_name, key_columns)  # ✅ Returns string
             else:
-                self.logger.log_message(f"Duplicate keys found in {temp_view_name}. Set 'remove_duplicates=True' to remove duplicates.", level="error")
                 raise ValueError(f"Duplicate keys found in {temp_view_name}. Merge operation aborted.")
-        else:
-            self.logger.log_message(f"No duplicates found in {temp_view_name}.", level="info")
-            return temp_view_name
+        
+        self.logger.log_message(f"No duplicates found in {temp_view_name}.", level="info")
+        return temp_view_name  # ✅ Ensure returning a string
 
     def generate_merge_sql(self, temp_view_name: str, database_name: str, table_name: str, key_columns: List[str]) -> str:
         """
         Constructs the MERGE SQL query for updating and inserting records (excluding DELETE logic).
-        
-        Args:
-            temp_view_name (str): Name of the temporary view.
-            database_name (str): Target database.
-            table_name (str): Target table.
-            key_columns (List[str]): Key columns.
-        
-        Returns:
-            str: The formatted MERGE SQL query.
         """
         try:
             self.logger.log_start("generate_merge_sql")
-            df = self.spark.table(temp_view_name)
+
+            # ✅ Ensure temp_view_name is a string, not a list
+            if isinstance(temp_view_name, list):
+                raise ValueError(f"Expected temp_view_name as a string, but got a list: {temp_view_name}")
+
+            df = self.spark.table(temp_view_name)  # <-- Error occurs here if temp_view_name is incorrect
             all_columns = [col for col in df.columns if col not in key_columns and col != 'CreatedDate']
+
             match_sql = ' AND '.join([f"s.{col.strip()} = t.{col.strip()}" for col in key_columns])
             update_sql = ', '.join([f"t.{col.strip()} = s.{col.strip()}" for col in all_columns])
             insert_columns = ', '.join([f"{col.strip()}" for col in key_columns + all_columns + ['CreatedDate']])
             insert_values = ', '.join([f"s.{col.strip()}" for col in key_columns + all_columns + ['CreatedDate']])
+
             merge_sql = f"""
             MERGE INTO {database_name}.{table_name} AS t
             USING {temp_view_name} AS s
             ON {match_sql}
             WHEN MATCHED THEN
-              UPDATE SET {update_sql}
+            UPDATE SET {update_sql}
             WHEN NOT MATCHED THEN
-              INSERT ({insert_columns}) VALUES ({insert_values})
+            INSERT ({insert_columns}) VALUES ({insert_values})
             """
+
             self.logger.log_block("MERGE SQL Query", sql_query=merge_sql, level="info")
             return merge_sql
+
         except Exception as e:
             self.logger.log_message(f"Error generating MERGE SQL: {e}", level="error")
             raise
+
         finally:
             self.logger.log_end("generate_merge_sql")
 
@@ -291,13 +281,16 @@ class TableManager:
 
     def display_newly_merged_data(self, database_name: str, table_name: str, pre_merge_version: int, post_merge_version: int):
         """
-        Displays the data that was newly merged by comparing table versions.
+        Retrieves the data that was newly merged by comparing table versions.
         
         Args:
             database_name (str): Target database.
             table_name (str): Target table.
             pre_merge_version (int): Pre-merge version.
             post_merge_version (int): Post-merge version.
+        
+        Returns:
+            DataFrame: DataFrame containing the newly merged records.
         """
         merged_data_sql = f"""
         SELECT * FROM {database_name}.{table_name} VERSION AS OF {post_merge_version}
@@ -308,62 +301,58 @@ class TableManager:
             merged_data_df = self.spark.sql(merged_data_sql)
             if merged_data_df.count() == 0:
                 self.logger.log_message("No newly merged data.", level="info")
-            else:
-                self.logger.log_message("Displaying up to 100 rows of newly merged data:", level="info")
-                #display(merged_data_df.limit(100))
+            return merged_data_df
         except Exception as e:
-            self.logger.log_message(f"Error displaying merged data: {e}", level="error")
+            self.logger.log_message(f"Error retrieving merged data: {e}", level="error")
             raise
 
     def get_pre_merge_version(self, database_name: str, table_name: str) -> int:
         """
         Retrieves the current version of the Delta table before the merge.
-        
+
         Args:
             database_name (str): Target database.
             table_name (str): Target table.
-        
+
         Returns:
             int: The pre-merge version.
         """
         try:
-            pre_merge_version = self.spark.sql(f"DESCRIBE HISTORY {database_name}.{table_name} LIMIT 1").select("version").collect()[0][0]
+            self.logger.log_message(f"Retrieving pre-merge version for {database_name}.{table_name}", level="info")
+            
+            # Ensure correct database and table reference
+            query = f"DESCRIBE HISTORY {database_name}.{table_name} LIMIT 1"
+            
+            pre_merge_version = self.spark.sql(query).select("version").collect()[0][0]
             return pre_merge_version
+
         except Exception as e:
             self.logger.log_message(f"Error retrieving pre-merge version: {e}", level="error")
             raise
 
     def merge_table(self, source_datasetidentifier: str, temp_view_name: str, key_columns: List[str]):
         """
-        Manages the merge process for a Delta table.
-        
-        This method orchestrates:
-          1. Retrieving destination details.
-          2. Ensuring the destination path exists.
-          3. Validating duplicates and removing them if specified.
-          4. Retrieving the pre-merge table version.
-          5. Generating and executing the MERGE SQL.
-          6. Generating and executing the DELETE SQL.
-          7. Displaying newly merged data.
-        
+        Merges new data into an existing Delta table.
+
         Args:
             source_datasetidentifier (str): Source dataset identifier.
-            temp_view_name (str): Temporary view name containing source data.
-            key_columns (List[str]): Key columns for matching.
+            temp_view_name (str): Temporary view containing new data.
+            key_columns (List[str]): Key columns for identifying existing records.
         """
         try:
             destination_path, database_name, table_name = self.get_destination_details(source_datasetidentifier)
             self.ensure_path_exists(destination_path)
-            temp_view_name = self.validate_and_create_duplicate_view(temp_view_name, key_columns, remove_duplicates=True)
-            pre_merge_version = self.get_pre_merge_version(database_name, table_name)
+
             merge_sql = self.generate_merge_sql(temp_view_name, database_name, table_name, key_columns)
-            self.execute_merge_and_get_post_version(temp_view_name, database_name, table_name, merge_sql, pre_merge_version)
+            self.spark.sql(merge_sql)
+            self.logger.log_info(f"✅ Data merged successfully into `{database_name}.{table_name}`")
+
             delete_sql = self.generate_delete_sql(temp_view_name, database_name, table_name, key_columns)
             self.spark.sql(delete_sql)
-            post_merge_version = pre_merge_version + 1
-            self.display_newly_merged_data(database_name, table_name, pre_merge_version, post_merge_version)
+            self.logger.log_info(f"✅ Deleted records no longer present in `{temp_view_name}` from `{database_name}.{table_name}`")
+
         except Exception as e:
-            self.logger.log_message(f"Error merging table: {e}", level="error")
+            self.logger.log_error(f"Error merging table: {e}")
             raise
 
     def manage_tables(self, dataframes: Dict[str, any], remove_duplicates: bool = False):
