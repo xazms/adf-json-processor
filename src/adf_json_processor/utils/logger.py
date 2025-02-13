@@ -1,20 +1,14 @@
 import logging
 import functools
 import sqlparse
-from pyspark.sql import DataFrame  # Only needed if you plan to log DataFrame summaries
+import sys
+
+from pyspark.sql import DataFrame
 from pygments import highlight
 from pygments.lexers import SqlLexer, PythonLexer
 from pygments.formatters import TerminalFormatter
 
-# ==============================================================================
-# Custom Logger Class
-# ==============================================================================
 class Logger:
-    """
-    Custom logger class for enhanced logging functionality, including debugging,
-    block logging, SQL query formatting, Python code formatting, and function entry/exit logging.
-    """
-
     def __init__(self, debug: bool = False, log_to_file: str = None):
         """
         Initialize the Logger using Python's built-in logging.
@@ -25,30 +19,25 @@ class Logger:
         """
         self.debug = debug
         self.logger = logging.getLogger("custom_logger")
-        # Prevent log messages from propagating to the root logger to avoid duplicates.
-        self.logger.propagate = False
 
-        # Clear existing handlers to prevent duplicate logging if re-initialized.
-        if self.logger.hasHandlers():
-            self.logger.handlers.clear()
+        # **Prevent logs from propagating to the Databricks root logger**
+        self.logger.propagate = False  
 
-        # Set the logging level based on the debug flag.
-        self.set_level(debug)
+        # Prevent duplicate handlers
+        if not self.logger.hasHandlers():
+            self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
 
-        # Create a formatter that includes level information.
-        formatter = logging.Formatter('[%(levelname)s] - %(message)s')
+            # Console handler
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(logging.Formatter('[%(levelname)s] - %(message)s'))
+            self.logger.addHandler(console_handler)
 
-        # Console handler with the formatter.
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
-
-        # File handler (if provided) using the same formatter.
-        if log_to_file:
-            file_handler = logging.FileHandler(log_to_file)
-            file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
-
+            # File handler (if provided)
+            if log_to_file:
+                file_handler = logging.FileHandler(log_to_file)
+                file_handler.setFormatter(logging.Formatter('[%(levelname)s] - %(message)s'))
+                self.logger.addHandler(file_handler)
+                
     def set_level(self, debug: bool):
         """Set the logging level based on the debug flag."""
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
@@ -73,35 +62,33 @@ class Logger:
 
     def log_block(self, header, content_lines=None, sql_query=None, level="info"):
         """
-        Log a block of messages with a header and content lines.
-        The header and footer are printed directly (without any logger prefix)
-        while the content lines are logged normally (with prefix).
-
-        Args:
-            header (str): The header text for the block.
-            content_lines (list, optional): List of lines to log within the block.
-            sql_query (str, optional): SQL query to log with syntax highlighting.
-            level (str): The logging level for the block content.
+        Ensures structured block logging in Databricks by using `print()` instead of `logger.info()`.
+        Prevents duplicate `INFO:custom_logger:` output.
         """
+
         separator_length = 100
         start_separator = "=" * separator_length
-        end_separator = "-" * separator_length
         formatted_header = f" {header} ".center(separator_length, "=")
+        end_separator = "-" * separator_length
 
-        # Print header and footer using print() to avoid any logger formatting.
-        print("\n" + start_separator)
-        print(formatted_header)
-        print(start_separator)
+        # Force everything to be printed together to avoid reordering in Databricks
+        output_lines = [
+            "\n" + start_separator,
+            formatted_header,
+            start_separator,
+        ]
 
         if content_lines:
-            for line in content_lines:
-                if line.strip():
-                    self.log_message(line, level=level)
+            output_lines.extend([f"[{level.upper()}] - {line}" for line in content_lines])
 
         if sql_query:
-            self.log_sql_query(sql_query, level=level)
+            output_lines.append(f"SQL Query:\n{sql_query}")
 
-        print(end_separator + "\n")
+        output_lines.append(end_separator)
+
+        # Print the whole block as a single output to prevent interleaving with Databricks logs
+        print("\n".join(output_lines))
+        sys.stdout.flush()  # Flush to force ordering in Databricks
 
     def log_sql_query(self, query: str, level: str = "info"):
         """
@@ -140,22 +127,27 @@ class Logger:
             additional_message (str): Additional message to include.
         """
         status = "successfully" if success else "with warnings or issues"
-        self.log_message(f"Finished {method_name} {status}. {additional_message}",
-                         level="info" if success else "warning")
+        self.log_message(f"Finished {method_name} {status}. {additional_message}", level="info" if success else "warning")
 
     def log_dataframe_summary(self, df: DataFrame, label: str, level="info"):
         """
-        Log summary information of a DataFrame.
+        Logs summary information of a DataFrame.
 
         Args:
             df (DataFrame): The DataFrame to summarize.
             label (str): Label for the DataFrame (e.g., 'Initial', 'Flattened').
-            level (str): Log level for the summary.
+            level (str): The logging level for the summary.
         """
+        log_level = getattr(logging, level.upper(), logging.INFO)
+        if not self.logger.isEnabledFor(log_level):
+            return
+
         if df:
             row_count = df.count()
             column_count = len(df.columns)
             estimated_memory = df.rdd.map(lambda row: len(str(row))).sum() / (1024 * 1024)
+
+            # Log the DataFrame info block
             self.log_block(f"{label} DataFrame Info", [
                 f"{label} Estimated Memory Usage: {estimated_memory:.2f} MB",
                 f"{label} Rows: {row_count}",
@@ -164,6 +156,7 @@ class Logger:
             ], level=level)
             df.printSchema()
 
+            # Log column types at the specified level
             column_types = [(field.name, field.dataType.simpleString()) for field in df.schema.fields]
             self.log_block(f"{label} Column Types", [
                 f"Column: {name}, Type: {dtype}" for name, dtype in column_types
@@ -224,6 +217,7 @@ class LoggerTester:
             self.logger.log_error("This is an error message. It will raise an exception.")
         except RuntimeError as e:
             print(f"Caught RuntimeError: {e}")
+
         try:
             self.logger.log_critical("This is a critical message. It will also raise an exception.")
         except RuntimeError as e:
@@ -235,6 +229,7 @@ class LoggerTester:
             "This is an informational message.",
             "Another piece of info."
         ], level="info")
+
         print("\nTesting block logging at DEBUG level:")
         self.logger.log_block("DEBUG Level Block", [
             "This is a debug message.",
@@ -264,8 +259,10 @@ class LoggerTester:
 
     def test_function_entry_exit(self):
         print("\nTesting function entry/exit logging:")
+
         @self.logger.log_function_entry_exit
         def test_function(x, y):
             return x + y
+
         result = test_function(5, 10)
         print(f"Result of test_function: {result}")
