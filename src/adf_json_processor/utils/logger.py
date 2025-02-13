@@ -75,7 +75,7 @@ class Logger:
         output_lines = [
             "\n" + start_separator,
             formatted_header,
-            start_separator,
+            end_separator,
         ]
 
         if content_lines:
