@@ -31,7 +31,6 @@ setup(
     install_requires=[
         "requests>=2.26",  # Ensures compatibility with API requests
         "pyspark>=3.2",  # Required for Spark DataFrame processing
-        "setuptools>=58.0",  # Ensures compatibility with packaging
         "sqlparse",  # Required for SQL formatting
         "pygments",  # Required for syntax highlighting in logs
     ],

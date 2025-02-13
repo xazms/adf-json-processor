@@ -1,7 +1,6 @@
 # Core dependencies
 requests>=2.26        # Required for API requests
 pyspark>=3.2          # Required for Spark DataFrame processing
-setuptools>=58.0      # Ensures compatibility with packaging
 sqlparse              # Required for SQL formatting
 pygments              # Required for syntax highlighting in logs
 
