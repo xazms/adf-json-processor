@@ -82,7 +82,8 @@ class Logger:
             output_lines.extend([f"[{level.upper()}] - {line}" for line in content_lines])
 
         if sql_query:
-            output_lines.append(self.log_sql_query(sql_query, level=level))
+            self.log_sql_query(sql_query, level=level)  # ✅ Log SQL properly
+            output_lines.append(f"🔹 SQL Query Logged at {level.upper()} Level")
 
         output_lines.append(end_separator)
 
