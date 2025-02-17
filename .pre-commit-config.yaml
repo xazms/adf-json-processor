@@ -5,7 +5,7 @@
 repos:
   # ✅ Standard pre-commit hooks (whitespace, end-of-file, YAML checks)
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0  # Updated to latest stable version
+    rev: v4.6.0  # ✅ Updated to latest stable version (March 2024)
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -13,17 +13,18 @@ repos:
       - id: check-json  # ✅ Added JSON validation
       - id: check-toml  # ✅ Added TOML validation
       - id: check-merge-conflict  # ✅ Prevents accidental merge conflicts
+      - id: check-added-large-files  # ✅ Prevents committing files over 500KB
 
   # ✅ Python Formatter (Black)
   - repo: https://github.com/psf/black
-    rev: 23.12.0  # Updated to latest stable version
+    rev: 24.3.0  # ✅ Fixes ReDoS vulnerabilities
     hooks:
       - id: black
         language_version: python3.8  # ✅ Explicit Python version for consistency
 
   # ✅ Python Linter (Flake8)
   - repo: https://github.com/PyCQA/flake8
-    rev: 6.1.0  # Updated to latest stable version
+    rev: 7.0.0  # ✅ Updated to latest stable version (March 2024)
     hooks:
       - id: flake8
         additional_dependencies:
@@ -34,7 +35,7 @@ repos:
 
   # ✅ Sort Imports Automatically (isort)
   - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0  # Latest stable version
+    rev: 5.13.2  # ✅ Latest stable version
     hooks:
       - id: isort
         name: Sort Imports
@@ -42,9 +43,23 @@ repos:
 
   # ✅ Security Check for Secrets (Detect Secrets)
   - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0  # Latest version for detecting secrets
+    rev: v1.4.0  # ✅ Latest version for detecting secrets
     hooks:
       - id: detect-secrets-hook
+
+  # ✅ Python Security Scanner (Bandit)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5  # ✅ Latest stable version (March 2024)
+    hooks:
+      - id: bandit
+        args: ["-r", "."]
+
+  # ✅ Static Code Analysis (Check AST for Syntax Issues)
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.14.0  # ✅ Keeps Python code up-to-date
+    hooks:
+      - id: pyupgrade
+        args: ["--py38-plus"]  # ✅ Ensure Python 3.8+ compatibility
 
   # ✅ Validate Markdown & YAML files (Ensures Clean Documentation)
   - repo: https://github.com/digitalmoksha/pre-commit-markdownlint

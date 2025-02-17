@@ -37,6 +37,9 @@ site/
 *.log
 pip-log.txt
 pip-delete-this-directory.txt
+logs/
+*.out
+nohup.out  # Ignore background process logs
 
 # Debug & profiling
 cython_debug/
@@ -46,6 +49,10 @@ cython_debug/
 *.py,cover
 .dmypy.json
 dmypy.json
+
+# Stack traces & error dumps
+*.stackdump
+*.crash
 
 # ===========================================
 # 🔹 Testing & Coverage
@@ -60,19 +67,29 @@ htmlcov/
 .pyre/
 .mypy_cache/
 
+# Ignore test artifacts
+junit.xml
+nosetests.xml
+test-results/
+coverage.xml
+.coverage
+
 # ===========================================
 # 🔹 IDE & Editor Specific Files
 # ===========================================
 
 # PyCharm
 .idea/
+*.iml
+*.ipr
+*.iws
 
 # VS Code
 .vscode/
 *.code-workspace
 
 # Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
 
 # IPython
 profile_default/
@@ -84,6 +101,24 @@ ipython_config.py
 
 # Rope (Python Refactoring Tool)
 .ropeproject
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# IntelliJ & Eclipse
+*.class
+*.jar
+*.war
+*.ear
+*.swp
+*.swo
+
+# Emacs & Vim
+*.swp
+*.swo
+*~
+.nfs*
 
 # ===========================================
 # 🔹 Version Management & Environment
@@ -97,12 +132,21 @@ Pipfile.lock
 
 # poetry
 poetry.lock
+pyproject.toml  # Avoid committing pyproject.toml in some cases
 
 # pdm
 pdm.lock
 .pdm.toml
 .pdm-python
 .pdm-build/
+
+# Docker
+docker-compose.override.yml
+.env  # Avoid committing environment variable files
+
+# Ignore GitHub Actions cache
+.github/workflows/*~
+.github/ISSUE_TEMPLATE/
 
 # ===========================================
 # 🔹 Data & Database Files
@@ -119,3 +163,57 @@ db.sqlite3-journal
 # Celery (Task Queue)
 celerybeat-schedule
 celerybeat.pid
+
+# Ignore backup files
+*.bak
+*.tmp
+*.swp
+
+# ===========================================
+# 🔹 Project-Specific Sensitive Files
+# ===========================================
+
+# Ignore sensitive configuration files
+config.yaml
+secrets.yaml
+secrets.json
+*.enc  # Ignore encrypted secrets
+
+# Ignore credentials
+auth.json
+*.pem
+*.crt
+*.key
+*.pfx
+*.cer
+*.der
+
+# Ignore compiled assets
+node_modules/
+bower_components/
+.cache/
+
+# Ignore temporary generated files
+tmp/
+temp/
+.cache/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===========================================
+# 🔹 Git & Versioning
+# ===========================================
+
+# Ignore local Git changes
+.gitignore
+.gitconfig
+.gitkeep
+.gitattributes
+
+# Ignore Git merge conflict files
+*.orig
+*.rej
+*.swp
+*.swo
+*~
