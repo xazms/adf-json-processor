@@ -1,12 +1,13 @@
 # Core dependencies
-requests>=2.26        # Required for API requests
-pyspark>=3.2          # Required for Spark DataFrame processing
-sqlparse              # Required for SQL formatting
-pygments              # Required for syntax highlighting in logs
+requests>=2.31        # ✅ Latest stable version (fixes security issues)
+pyspark>=3.4          # ✅ Updated for better performance and security
+sqlparse>=0.4.4       # ✅ Updated for security fixes
+pygments>=2.17        # ✅ Updated to fix syntax highlighting issues
 
 # Development dependencies
-pytest                # Testing framework
-pytest-cov            # Test coverage reporting
-flake8                # Linting for code style enforcement
-black                 # Code formatter
-pre-commit            # Pre-commit hooks for automatic formatting
+pytest>=7.4.0         # ✅ Updated to latest stable version
+pytest-cov>=4.0.0     # ✅ Ensures compatibility with newer pytest
+flake8>=5.0.4         # ✅ Linting for code style enforcement
+black>=24.3.0         # ✅ Fixes Regular Expression Denial of Service (ReDoS)
+pre-commit>=3.5.0     # ✅ Keeps formatting stable
+setuptools>=70.0      # ✅ Fixes Command Injection vulnerability
