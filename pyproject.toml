@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "adf-json-processor"
-version = "0.1.3"
+version = "0.1.4"
 description = "ADF JSON Processor for Azure Data Lake"
 authors = ["Azmir Salihovic <azmir.salihovic@twoday.com>"]
 license = "MIT"

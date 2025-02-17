@@ -1,6 +1,6 @@
 import os
+import json
 import datetime
-import ast
 from adf_json_processor.utils.logger import Logger
 
 class Config:
@@ -68,24 +68,31 @@ class Config:
         """
         self.logger.log_debug("Parsing ADF configuration...")
 
-        # Parse ADF configuration from widgets
+        # ✅ Parse ADF configuration from widgets
         adf_config_str = self._get_widget_value("ADFConfig")
-        adf_config = ast.literal_eval(adf_config_str)
 
-        (
-            self.organization,
-            self.project,
-            self.repository,
-            self.branch,
-            self.folder_path,
-        ) = adf_config
+        try:
+            adf_config = json.loads(adf_config_str)  # ✅ Convert JSON string to dictionary
+        except json.JSONDecodeError as e:
+            self.logger.log_error(f"Failed to parse ADFConfig JSON: {e}")
+            raise ValueError(f"Invalid JSON format in ADFConfig: {adf_config_str}")
+
+        # Normalize keys to lowercase to handle different JSON formats
+        normalized_config = {k.lower(): v for k, v in adf_config.items()}
+
+        # Extract values using lowercase keys
+        self.organization = normalized_config.get("organization", "Unknown")
+        self.project = normalized_config.get("project", "Unknown")
+        self.repository = normalized_config.get("repository", "Unknown")
+        self.branch = normalized_config.get("branch", "Unknown")
+        self.folder_path = normalized_config.get("folder_path", "Unknown")  # Ensure correct key name
 
         self.source_storage_account = self._get_widget_value("SourceStorageAccount")
         self.destination_storage_account = self._get_widget_value("DestinationStorageAccount")
         self.datasetidentifier = self._get_widget_value("Datasetidentifier")
         self.source_filename = self._get_widget_value("SourceFileName")
 
-        # Store ADF details in a structured dictionary
+        # ✅ Store ADF details in a structured dictionary
         self.adf_details = {
             "Organization": self.organization,
             "Project": self.project,
@@ -94,11 +101,11 @@ class Config:
             "Folder Path": self.folder_path,
         }
 
-        # Generate paths
+        # ✅ Generate paths
         self.log_path = self._get_directory_path("log", f"error_log_{self._get_timestamp()}.json")
         self.output_path = self._get_directory_path("output", "combined_hierarchical_pipeline_structure_filtered.json")
 
-        # Ensure directories exist
+        # ✅ Ensure directories exist
         self._ensure_directories_exist()
 
     def _get_timestamp(self):
