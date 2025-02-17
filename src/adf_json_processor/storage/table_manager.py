@@ -18,7 +18,6 @@ class TableManager:
       5. generate_merge_sql: Constructs an optimized MERGE SQL query.
       6. generate_delete_sql: Constructs a DELETE SQL query for stale records.
       7. execute_merge_and_get_post_version: Runs the merge and retrieves the updated version.
-      8. display_newly_merged_data: Displays only newly changed records.
     """
 
     def __init__(self, spark: SparkSession, dbutils, destination_environment: str, logger):
@@ -222,7 +221,7 @@ class TableManager:
             merged_data_df = self.spark.sql(merged_data_sql)
             if merged_data_df.count() > 0:
                 self.logger.log_info("Displaying newly merged records:")
-                display(merged_data_df.limit(10))
+                #display(merged_data_df.limit(10))
         except Exception as e:
             self._handle_error(e, "Error displaying merged data")
 
