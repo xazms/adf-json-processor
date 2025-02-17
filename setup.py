@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="adf-json-processor",
-    version="0.1.3",  # Updated version for improved structure
+    version="0.1.4",  # Updated version for improved structure
     author="Azmir Salihovic",
     author_email="azmir.salihovic@twoday.com",
     description="A Python package for processing Azure Data Factory (ADF) JSON files and storing them as Delta tables in Azure Data Lake Storage",
