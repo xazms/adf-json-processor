@@ -87,7 +87,7 @@ class TableManager:
             USING DELTA
             LOCATION 'dbfs:{destination_path}/'
             """
-            self.logger.log_sql_query(create_table_sql)
+            self.logger.log_block("Executing Create SQL Query", sql_query=create_table_sql)
 
             if not self.check_if_table_exists(database_name, table_name):
                 self.spark.sql(create_table_sql)
@@ -140,7 +140,7 @@ class TableManager:
         GROUP BY {key_columns_str}
         HAVING COUNT(*) > 1
         """
-        self.logger.log_sql_query(duplicate_keys_query)
+        self.logger.log_block("Executing Duplicate SQL Query", sql_query=duplicate_keys_query)
 
         try:
             duplicates_df = self.spark.sql(duplicate_keys_query)
@@ -165,17 +165,12 @@ class TableManager:
     def generate_merge_sql(self, temp_view_name: str, database_name: str, table_name: str, key_columns: List[str]) -> str:
         """
         Generates an optimized MERGE SQL query for Delta table updates and inserts.
-        Ensures updates occur only when values have changed.
         """
-
-        df = self.spark.table(temp_view_name)  # Use self.spark inside the class
+        df = self.spark.table(temp_view_name)  
         non_key_columns = [col for col in df.columns if col not in key_columns]
 
         match_condition = ' AND '.join([f"s.{col} = t.{col}" for col in key_columns])
-
-        # Ensure updates happen ONLY when data changes
         update_condition = ' OR '.join([f"t.{col} <> s.{col}" for col in non_key_columns])
-
         update_statement = ', '.join([f"t.{col} = s.{col}" for col in non_key_columns])
         insert_columns = ', '.join(df.columns)
         insert_values = ', '.join([f"s.{col}" for col in df.columns])
@@ -187,11 +182,12 @@ class TableManager:
         WHEN MATCHED AND ({update_condition}) THEN UPDATE SET {update_statement}
         WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})
         """
-
         return merge_sql
 
     def generate_delete_sql(self, temp_view_name: str, database_name: str, table_name: str, key_columns: List[str]) -> str:
-        """Generates a DELETE SQL query to remove records no longer present in the source view."""
+        """
+        Generates a DELETE SQL query to remove records that no longer exist in the source view.
+        """
         key_conditions = ' AND '.join([f"t.{col} = s.{col}" for col in key_columns])
         return f"""
         DELETE FROM {database_name}.{table_name} AS t
@@ -296,38 +292,38 @@ class TableManager:
 
         database_name, table_name = get_databricks_table_info_extended(self.destination_environment, source_datasetidentifier)
 
-        # Get pre-merge version
+        # ✅ Retrieve the last table version before merging
         pre_merge_version = self.get_pre_merge_version(database_name, table_name)
 
-        # Generate MERGE SQL
+        # ✅ Generate MERGE SQL
         merge_sql = self.generate_merge_sql(temp_view_name, database_name, table_name, key_columns)
+
+        # ✅ Log MERGE SQL using the correct `log_block` format
+        self.logger.log_block("Executing MERGE SQL Query", sql_query=merge_sql)
+        
+        # ✅ Execute MERGE SQL
         self.spark.sql(merge_sql)
 
-        # Execute DELETE SQL
+        # ✅ Generate DELETE SQL
         delete_sql = self.generate_delete_sql(temp_view_name, database_name, table_name, key_columns)
+
+        # ✅ Log DELETE SQL using the correct `log_block` format
+        self.logger.log_block("Executing DELETE SQL Query", sql_query=delete_sql)
+
+        # ✅ Execute DELETE SQL
         self.spark.sql(delete_sql)
 
-        # Compute counts correctly
+        # ✅ Compute the number of inserted, updated, and deleted records
         inserted_count, updated_count, deleted_count = self.compute_change_counts(database_name, table_name, temp_view_name, key_columns)
 
-        # Prepare dictionary for tracking changes
-        merge_summary = {
-            "inserted_count": inserted_count,
-            "updated_count": updated_count,
-            "deleted_count": deleted_count
-        }
-
-        # Prepare dictionary for tracking views
-        table_views = {"inserted": None, "updated": None, "deleted": None}
-
-        # Log summary
-        self.logger.log_block(f"Merge Summary for `{table_name}`", [
+        # ✅ Log merge summary
+        self.logger.log_block("Merge Summary", [
             f"📥 Inserted: {inserted_count}",
             f"✏️ Updated: {updated_count}",
             f"🗑️ Deleted: {deleted_count}"
         ])
 
-        return merge_summary, table_views
+        return {"inserted_count": inserted_count, "updated_count": updated_count, "deleted_count": deleted_count}, {}
 
     def merge_all_tables(self, dataframes: Dict[str, any]) -> Tuple[Dict[str, any], Dict[str, Dict[str, str]]]:
         """Orchestrates merging all tables and returns both summary and view references for display."""
@@ -400,7 +396,7 @@ class TableManager:
             validated_view = self.validate_and_create_duplicate_view(temp_view_name, key_columns, remove_duplicates=True)
 
             # ✅ Create table if not exists
-            self.create_table(source_datasetidentifier, validated_view)
+            #self.create_table(source_datasetidentifier, validated_view)
 
             # ✅ Merge table with validated data
             #self.merge_table(source_datasetidentifier, validated_view, key_columns)
